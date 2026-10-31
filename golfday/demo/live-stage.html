@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;background:#e4e9e2;overflow:hidden;font-family:'DejaVu Sans',system-ui,sans-serif;color:#0b1712}
+  .screen{width:1440px;height:900px;display:flex;flex-direction:column}
+  .bar{height:44px;display:flex;align-items:center;gap:10px;padding:0 16px;background:#04241a;color:#eefaf2;font-size:14px;flex:0 0 auto}
+  .bar .dot{width:9px;height:9px;border-radius:50%;background:#44b581}
+  .bar .tag{margin-left:auto;background:rgba(255,255,255,.12);border-radius:999px;padding:5px 12px;font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+  .wrap{display:flex;gap:12px;padding:12px;flex:1;min-height:0;box-sizing:border-box}
+  .pane{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 10px 28px -18px rgba(4,36,26,.6);display:flex;flex-direction:column;min-width:0}
+  .pane.left{width:812px;flex:0 0 auto}
+  .pane.right{flex:1}
+  .pane .head{height:30px;display:flex;align-items:center;gap:8px;padding:0 12px;background:#dde5da;font-size:12px;color:#33413a;border-bottom:1px solid rgba(0,0,0,.08);flex:0 0 auto}
+  .pane .head i{width:8px;height:8px;border-radius:50%;background:#b6c1ba;display:block}
+  .pane .head .dots{display:flex;gap:4px}
+  .pane .head .live{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#137c53;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+  .pane .head .live b{width:8px;height:8px;border-radius:50%;background:#22c55e;display:block;animation:none}
+  .frame{flex:1;overflow:hidden;position:relative}
+  iframe{border:0;position:absolute;top:0;left:0;background:#fff;width:100%;height:100%}
+</style></head>
+<body>
+<div class="screen">
+  <div class="bar">
+    <span class="dot"></span> <b>GolfDay</b> &nbsp;·&nbsp; Autumn Invitational &nbsp;·&nbsp; live scoring
+    <span class="tag">two screens · one database</span>
+  </div>
+  <div class="wrap">
+    <div class="pane left">
+      <div class="head"><span class="dots"><i></i><i></i><i></i></span> On the course · Group 1 scorecard <span class="live"><b></b>scoring</span></div>
+      <div class="frame"><iframe id="left" src="http://127.0.0.1:3000/score/__SCORE_TOKEN__"></iframe></div>
+    </div>
+    <div class="pane right">
+      <div class="head"><span class="dots"><i></i><i></i><i></i></span> Clubhouse · live leaderboard <span class="live"><b></b>live</span></div>
+      <div class="frame"><iframe id="right" src="http://127.0.0.1:3000/live/__SLUG__"></iframe></div>
+    </div>
+  </div>
+</div>
+</body></html>

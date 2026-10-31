@@ -1,0 +1,101 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;background:#000;font-family:'DejaVu Sans',sans-serif}
+  canvas{display:block}
+</style></head>
+<body>
+<canvas id="c" width="1440" height="900"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let recorder = null, chunks = [], stream = null, track = null, queue = Promise.resolve();
+const W = canvas.width, H = canvas.height;
+
+function drawCaption(caption) {
+  if (!caption) return;
+  const pad = 28, fs = 26, lh = 34;
+  ctx.font = `600 ${fs}px 'DejaVu Sans', sans-serif`;
+  const words = caption.split(' ');
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > W - 260) { lines.push(line); line = w; } else line = test;
+  }
+  if (line) lines.push(line);
+  const boxH = lines.length * lh + pad;
+  ctx.fillStyle = 'rgba(4,20,15,.78)';
+  const boxW = Math.min(W - 80, Math.max(...lines.map(l => ctx.measureText(l).width)) + 260);
+  const x = 40, y = H - boxH - 36;
+  ctx.beginPath();
+  ctx.roundRect(x, y, boxW, boxH, 16);
+  ctx.fill();
+  ctx.fillStyle = '#7bd0a5';
+  ctx.fillRect(x + 18, y + 18, 5, boxH - 36);
+  ctx.fillStyle = '#ffffff';
+  lines.forEach((l, i) => ctx.fillText(l, x + 38, y + pad / 2 + lh * i + 22));
+}
+
+async function drawFrame(b64, caption) {
+  const blob = await (await fetch('data:image/jpeg;base64,' + b64)).blob();
+  const bmp = await createImageBitmap(blob);
+  ctx.drawImage(bmp, 0, 0, W, H);
+  bmp.close?.();
+  drawCaption(caption);
+  if (track) track.requestFrame();
+}
+
+window.__start = (mime) => {
+  stream = canvas.captureStream(0);
+  track = stream.getVideoTracks()[0];
+  chunks = [];
+  recorder = new MediaRecorder(stream, { mimeType: mime || 'video/webm;codecs=vp9', videoBitsPerSecond: 5_000_000 });
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  recorder.start();
+  return recorder.mimeType;
+};
+
+window.__frame = (b64, caption) => {
+  if (window.__paused) return Promise.resolve();
+  queue = queue.then(() => (window.__paused ? null : drawFrame(b64, caption))).catch((e) => console.warn('frame err', e));
+  return queue;
+};
+
+window.__title = async (title, subtitle, accent) => {
+  ctx.fillStyle = '#04241a';
+  ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W * 0.8, 0, 0, W * 0.8, 0, W * 0.8);
+  g.addColorStop(0, 'rgba(33,154,103,.55)');
+  g.addColorStop(1, 'rgba(4,36,26,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // flag mark
+  ctx.fillStyle = '#137c53'; ctx.beginPath(); ctx.roundRect(W/2 - 40, 250, 80, 80, 20); ctx.fill();
+  ctx.strokeStyle = '#eefaf2'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(W/2 - 8, 312); ctx.lineTo(W/2 - 8, 272); ctx.stroke();
+  ctx.fillStyle = '#e7c27a'; ctx.beginPath(); ctx.moveTo(W/2 - 6, 274); ctx.lineTo(W/2 + 26, 282); ctx.lineTo(W/2 - 6, 292); ctx.closePath(); ctx.fill();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "800 64px 'DejaVu Sans', sans-serif";
+  ctx.fillText(title, W/2, 420);
+  if (subtitle) {
+    ctx.fillStyle = accent || '#b0e5c6';
+    ctx.font = "500 30px 'DejaVu Sans', sans-serif";
+    ctx.fillText(subtitle, W/2, 474);
+  }
+  ctx.textAlign = 'left';
+  if (track) track.requestFrame();
+};
+
+window.__stop = () => new Promise((resolve) => {
+  recorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: chunks[0]?.type || 'video/webm' });
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    let s = '';
+    const CH = 0x8000;
+    for (let i = 0; i < buf.length; i += CH) s += String.fromCharCode.apply(null, buf.subarray(i, i + CH));
+    resolve({ b64: btoa(s), size: buf.length, type: blob.type });
+  };
+  recorder.stop();
+});
+</script>
+</body></html>
