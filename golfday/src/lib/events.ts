@@ -288,10 +288,15 @@ export type RegisterPlayerInput = {
   eventId: string;
   playerId: string;
   groupId?: string | null;
+  /** Player entering themselves (not an admin) - stricter group rules apply. */
+  selfEntry?: boolean;
   tee?: string;
   status?: "REGISTERED" | "WAITLIST";
   force?: boolean;
 };
+
+/** Largest tee group a player can join on their own; admins can override. */
+const SELF_ENTRY_GROUP_LIMIT = 4;
 
 export async function registerPlayer(input: RegisterPlayerInput) {
   const event = await getEventById(input.eventId);
@@ -313,6 +318,30 @@ export async function registerPlayer(input: RegisterPlayerInput) {
     );
   }
 
+  // The group must belong to this event - otherwise a crafted request could put
+  // a player into another event's tee group (and hand them its scoring link).
+  if (input.groupId) {
+    const [group] = await db.select().from(groups).where(eq(groups.id, input.groupId)).limit(1);
+    if (!group || group.eventId !== input.eventId) {
+      throw new ApiError(400, "That tee group is not part of this event", "invalid_group");
+    }
+    if (input.selfEntry) {
+      const [{ count: inGroup }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(eventPlayers)
+        .where(
+          and(
+            eq(eventPlayers.groupId, input.groupId),
+            eq(eventPlayers.status, "REGISTERED"),
+            ne(eventPlayers.playerId, input.playerId),
+          ),
+        );
+      if (Number(inGroup) >= SELF_ENTRY_GROUP_LIMIT) {
+        throw new ApiError(409, `${group.name} is full - pick another group`, "group_full");
+      }
+    }
+  }
+
   const course = event.courseId ? await getCourseWithHoles(event.courseId) : null;
   const tees = parseTees(course?.course.tees);
   const tee: Tee = tees.find((t) => t.name.toLowerCase() === (input.tee ?? "White").toLowerCase()) ?? tees[0] ?? DEFAULT_TEE;
@@ -325,11 +354,27 @@ export async function registerPlayer(input: RegisterPlayerInput) {
     .where(and(eq(eventPlayers.eventId, input.eventId), eq(eventPlayers.playerId, input.playerId)))
     .limit(1);
 
+  const registeredCount = async () => {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(eventPlayers)
+      .where(and(eq(eventPlayers.eventId, input.eventId), eq(eventPlayers.status, "REGISTERED")));
+    return Number(count);
+  };
+  const wantStatus = input.status ?? "REGISTERED";
+
   if (existing) {
+    // A withdrawn or waitlisted player coming back in takes a place, so the
+    // field limit applies to them too (previously they skipped the check).
+    if (existing.status !== "REGISTERED" && wantStatus === "REGISTERED" && !input.force) {
+      if ((await registeredCount()) >= event.maxPlayers) {
+        throw new ApiError(409, "This event is full", "event_full");
+      }
+    }
     await db
       .update(eventPlayers)
       .set({
-        status: "REGISTERED",
+        status: wantStatus,
         groupId: input.groupId ?? existing.groupId,
         tee: tee.name,
         handicapIndex: player.handicapIndex,
@@ -338,11 +383,7 @@ export async function registerPlayer(input: RegisterPlayerInput) {
       })
       .where(eq(eventPlayers.id, existing.id));
   } else {
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(eventPlayers)
-      .where(and(eq(eventPlayers.eventId, input.eventId), eq(eventPlayers.status, "REGISTERED")));
-    if (Number(count) >= event.maxPlayers && !input.force) {
+    if (wantStatus === "REGISTERED" && (await registeredCount()) >= event.maxPlayers && !input.force) {
       throw new ApiError(409, "This event is full", "event_full");
     }
     await db.insert(eventPlayers).values({
@@ -350,7 +391,7 @@ export async function registerPlayer(input: RegisterPlayerInput) {
       eventId: input.eventId,
       playerId: input.playerId,
       groupId: input.groupId ?? null,
-      status: input.status ?? "REGISTERED",
+      status: wantStatus,
       handicapIndex: player.handicapIndex,
       courseHandicap: ch,
       playingHandicap: ph,

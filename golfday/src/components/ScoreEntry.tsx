@@ -282,7 +282,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
                     <div className="truncate text-[13px] font-semibold">{s.playerName}</div>
                     <div className="text-[11px] text-ink/45">thru {s.thru} · {formatToPar(s.toPar)}</div>
                   </div>
-                  <span className="font-mono text-[14px] font-extrabold">{card.event.format === "STABLEFORD" ? s.points : s.totalNet}</span>
+                  <span className="font-mono text-[14px] font-extrabold">{card.event.format === "STABLEFORD" ? s.points : formatToPar(s.netToPar)}</span>
                 </li>
               ))}
               {topFive.length === 0 && <li className="px-4 py-6 text-center text-[12.5px] text-ink/45">The board is empty - you could be first.</li>}

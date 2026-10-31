@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { players } from "@/db/schema";
+import { groups, players } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { listEventsForAdmin, listEventsForPlayer, STATUS_LABEL, STATUS_STYLE } from "@/lib/events";
 import { buildLeaderboard } from "@/lib/leaderboard";
@@ -25,6 +25,10 @@ export default async function DashboardPage() {
   const liveEvent = myEvents.find(({ event }) => event.status === "IN_PROGRESS");
   const liveBoard = liveEvent ? await buildLeaderboard(liveEvent.event.id) : null;
   const myRow = liveBoard?.standings.find((s) => s.playerId === user.playerId);
+  const myGroupId = liveEvent?.registration.groupId ?? null;
+  const [myGroup] = myGroupId
+    ? await db.select({ token: groups.token }).from(groups).where(eq(groups.id, myGroupId)).limit(1)
+    : [];
 
   return (
     <div className="space-y-6">
@@ -66,9 +70,13 @@ export default async function DashboardPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 border-t border-ink/[0.06] px-5 py-3">
-            <Link href={`/score/${liveBoard.groups.find((g) => g.id === liveEvent.registration.groupId)?.token ?? ""}`} className="btn-primary btn-sm">
-              Enter scores for my group
-            </Link>
+            {myGroup ? (
+              <Link href={`/score/${myGroup.token}`} className="btn-primary btn-sm">
+                Enter scores for my group
+              </Link>
+            ) : (
+              <span className="text-[12.5px] text-ink/50">You&apos;re not in a tee group yet.</span>
+            )}
             <Link href={`/events/${liveEvent.event.slug}`} className="btn-secondary btn-sm">Event details</Link>
           </div>
         </section>
