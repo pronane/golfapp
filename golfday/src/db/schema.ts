@@ -197,6 +197,69 @@ export const eventState = sqliteTable("event_state", {
   updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
 });
 
+/**
+ * Per-event game settings, kept in their own table so existing databases pick
+ * them up with a plain CREATE TABLE (no column migrations).
+ */
+export const eventSettings = sqliteTable("event_settings", {
+  eventId: text("event_id").primaryKey(),
+  skins: text("skins").notNull().default("OFF"), // OFF | NET | GROSS
+  skinsCarry: integer("skins_carry", { mode: "boolean" }).notNull().default(true),
+  teamFormat: text("team_format").notNull().default("NONE"), // NONE | FOURBBB
+  /** [{ kind: "NEAREST_PIN" | "LONGEST_DRIVE", holeNumber }] */
+  sideHoles: text("side_holes").notNull().default("[]"),
+  /** [{ name, url? }] shown as a strip on the leaderboard */
+  sponsors: text("sponsors").notNull().default("[]"),
+  /** ["Europe", "USA"] for team match play */
+  teamNames: text("team_names").notNull().default('["Team A","Team B"]'),
+  /** [{ id, name, sideA: [playerId], sideB: [playerId] }] */
+  matches: text("matches").notNull().default("[]"),
+  /** 0 = free; otherwise the entry fee in pence */
+  entryFeePence: integer("entry_fee_pence").notNull().default(0),
+  updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+});
+
+/** 4BBB pairs (two partners, better ball counts). */
+export const eventPairs = sqliteTable("event_pairs", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  name: text("name").notNull(),
+  playerA: text("player_a").notNull(),
+  playerB: text("player_b").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (t) => ({
+  eventIdx: index("event_pairs_event_idx").on(t.eventId),
+}));
+
+/** Nearest-the-pin (feet) and longest-drive (yards) measurements. */
+export const sideGameEntries = sqliteTable("side_game_entries", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  kind: text("kind").notNull(), // NEAREST_PIN | LONGEST_DRIVE
+  holeNumber: integer("hole_number").notNull(),
+  playerId: text("player_id").notNull(),
+  distance: real("distance").notNull(),
+  recordedBy: text("recorded_by"),
+  updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  entryUnique: uniqueIndex("side_game_entry_unique").on(t.eventId, t.kind, t.holeNumber, t.playerId),
+}));
+
+/** Entry-fee payments (Stripe Checkout or marked paid by an organiser). */
+export const eventPayments = sqliteTable("event_payments", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  playerId: text("player_id").notNull(),
+  status: text("status").notNull().default("PENDING"), // PENDING | PAID
+  method: text("method").notNull().default("MANUAL"), // MANUAL | STRIPE
+  amountPence: integer("amount_pence").notNull().default(0),
+  stripeSessionId: text("stripe_session_id"),
+  paidAt: text("paid_at"),
+  updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  paymentUnique: uniqueIndex("event_payment_unique").on(t.eventId, t.playerId),
+}));
+
 export type User = typeof users.$inferSelect;
 export type Player = typeof players.$inferSelect;
 export type Course = typeof courses.$inferSelect;

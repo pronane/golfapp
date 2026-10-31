@@ -52,6 +52,7 @@ function mulberry32(seed: number) {
 async function wipe() {
   console.log("🧹  wiping demo data…");
   const tables = [
+    "event_payments", "side_game_entries", "event_pairs", "event_settings",
     "score_audit", "scores", "event_players", "groups", "event_admins",
     "event_holes", "event_state", "events", "course_holes", "courses", "players", "users",
   ];

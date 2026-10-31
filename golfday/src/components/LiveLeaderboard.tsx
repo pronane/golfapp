@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LeaderboardPayload } from "@/lib/leaderboard";
 import { formatEventDate, formatToPar, ordinal } from "@/lib/format";
+import { GamesPanels, SponsorStrip } from "./GamesPanels";
 import { LiveDot, Trophy } from "./Icons";
 import { useLiveBoard } from "./useLiveBoard";
 
@@ -15,7 +16,7 @@ function relative(date: Date | null) {
   return `${Math.round(seconds / 60)}m ago`;
 }
 
-export function LiveLeaderboard({ initial }: { initial: LeaderboardPayload }) {
+export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardPayload; tv?: boolean }) {
   const { board, status, changed, lastUpdate } = useLiveBoard(initial.event.id, initial);
   const [, forceTick] = useState(0);
   const [showCards, setShowCards] = useState(false);
@@ -29,6 +30,8 @@ export function LiveLeaderboard({ initial }: { initial: LeaderboardPayload }) {
 
   const isStableford = data.event.format === "STABLEFORD";
   const started = data.standings.some((s) => s.thru > 0);
+
+  if (tv) return <TvBoard data={data} changed={changed} live={status === "live"} />;
 
   return (
     <div className="space-y-4">
@@ -169,6 +172,10 @@ export function LiveLeaderboard({ initial }: { initial: LeaderboardPayload }) {
         </div>
       )}
 
+      <SponsorStrip games={data.games} />
+
+      <GamesPanels games={data.games} />
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="card card-pad">
           <h2 className="text-[15px] font-bold">Group sweep</h2>
@@ -208,7 +215,8 @@ export function LiveLeaderboard({ initial }: { initial: LeaderboardPayload }) {
       </div>
 
       <p className="text-center text-[12px] text-ink/40">
-        Refresh-free live board · <Link className="link" href={`/events/${data.event.slug}`}>event details</Link>
+        Refresh-free live board · <Link className="link" href={`/events/${data.event.slug}`}>event details</Link> ·{" "}
+        <Link className="link" href={`/live/${data.event.slug}?tv=1`}>clubhouse TV mode</Link>
       </p>
     </div>
   );
@@ -219,6 +227,113 @@ function HeaderStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl bg-white/[0.06] px-3 py-2 ring-1 ring-inset ring-white/10">
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-100/50">{label}</div>
       <div className="text-[17px] font-extrabold leading-tight">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * Full-screen clubhouse display: big type, the leaderboard scrolling slowly on
+ * its own, side and team games alongside, sponsors along the bottom. Opened
+ * with /live/<slug>?tv=1 on a TV or projector; no controls to touch.
+ */
+function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: string[]; live: boolean }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [clock, setClock] = useState("");
+  const isStableford = data.event.format === "STABLEFORD";
+
+  useEffect(() => {
+    const tick = () => setClock(new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }));
+    tick();
+    const id = window.setInterval(tick, 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Slow continuous scroll; pause at the bottom, then jump back to the leaders.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let pauseUntil = Date.now() + 6000;
+    const id = window.setInterval(() => {
+      if (Date.now() < pauseUntil) return;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) {
+        pauseUntil = Date.now() + 6000;
+        window.setTimeout(() => el.scrollTo({ top: 0, behavior: "smooth" }), 4000);
+        return;
+      }
+      el.scrollTop += 1;
+    }, 40);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-fairway-950 text-white">
+      <header className="flex items-center justify-between gap-6 border-b border-white/10 px-8 py-5">
+        <div>
+          <div className="flex items-center gap-2 text-[14px] font-semibold uppercase tracking-[0.16em] text-fairway-100/70">
+            {data.event.status === "IN_PROGRESS" && live ? (<><LiveDot /> Live</>) : data.event.status === "COMPLETED" ? "Final result" : "Leaderboard"}
+          </div>
+          <h1 className="text-4xl font-extrabold tracking-tight">{data.event.name}</h1>
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-4xl font-extrabold">{clock}</div>
+          <div className="text-[15px] text-fairway-100/70">
+            {data.event.courseName ?? ""} · {isStableford ? "Stableford" : "Net stroke play"}
+          </div>
+        </div>
+      </header>
+
+      <div className="grid min-h-0 flex-1 grid-cols-[1.6fr_1fr] gap-6 px-8 py-6">
+        <div ref={scroller} className="min-h-0 overflow-hidden rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/10">
+          <table className="w-full text-left">
+            <thead className="sticky top-0 bg-fairway-950/95 text-[14px] uppercase tracking-wide text-white/60">
+              <tr>
+                <th className="w-20 px-5 py-3">Pos</th>
+                <th className="py-3">Player</th>
+                <th className="w-24 py-3 text-center">Thru</th>
+                <th className="w-28 py-3 pr-5 text-right">{isStableford ? "Points" : "Net"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.standings.map((s) => (
+                <tr key={s.playerId} className={`border-t border-white/[0.06] ${changed.includes(s.playerId) ? "score-flash" : ""}`}>
+                  <td className="px-5 py-3 font-mono text-2xl font-bold text-white/70">
+                    {s.thru === 0 ? "–" : s.tied ? `T${s.position}` : s.position}
+                  </td>
+                  <td className="py-3">
+                    <div className="text-2xl font-bold">{s.playerName}</div>
+                    <div className="text-[14px] text-white/60">{s.groupName ?? ""} · PH {s.playingHandicap}</div>
+                  </td>
+                  <td className="py-3 text-center font-mono text-2xl">{s.thru === 0 ? "–" : s.thru === data.holes.length ? "F" : s.thru}</td>
+                  <td className="py-3 pr-5 text-right font-mono text-3xl font-extrabold">
+                    {s.thru === 0 ? "–" : isStableford ? s.points : formatToPar(s.netToPar)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="min-h-0 space-y-4 overflow-hidden">
+          <GamesPanels games={data.games} tv />
+          {!data.games?.matchPlay && (
+            <section className="rounded-2xl bg-white/[0.06] p-5 ring-1 ring-inset ring-white/10">
+              <h2 className="text-[15px] font-bold">Group sweep</h2>
+              <ol className="mt-3 space-y-1.5">
+                {[...data.groups].sort((a, b) => b.points - a.points).slice(0, 5).map((g, i) => (
+                  <li key={g.id} className="flex items-center justify-between rounded-xl bg-white/[0.05] px-3 py-2 text-[15px]">
+                    <span><span className="mr-2 font-mono text-white/60">{i + 1}</span>{g.name}</span>
+                    <span className="font-mono font-extrabold">{g.points}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+        </div>
+      </div>
+
+      <footer className="border-t border-white/10 px-8 py-4">
+        <SponsorStrip games={data.games} tv />
+      </footer>
     </div>
   );
 }
