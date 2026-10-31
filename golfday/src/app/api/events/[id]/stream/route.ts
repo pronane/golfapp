@@ -1,5 +1,5 @@
-import { getRevision } from "@/lib/events";
-import { buildLeaderboard } from "@/lib/leaderboard";
+import { getEventById, getRevision } from "@/lib/events";
+import { buildLeaderboard, canViewEventBoard } from "@/lib/leaderboard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,6 +13,12 @@ type Ctx = { params: Promise<{ id: string }> };
  */
 export async function GET(request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
+  // Same rule as the JSON board: private golf days only stream to the people
+  // who run them, and answer 404 so the id is not confirmed.
+  const event = await getEventById(id);
+  if (!event || !(await canViewEventBoard(event))) {
+    return Response.json({ error: "Event not found" }, { status: 404 });
+  }
   const lite = new URL(request.url).searchParams.get("lite") === "1";
   const encoder = new TextEncoder();
 

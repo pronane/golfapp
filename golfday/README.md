@@ -26,7 +26,7 @@ golfday/
 ```bash
 cd golfday
 npm install
-cp .env.example .env          # then set AUTH_SECRET to something long
+cp .env.example .env          # then set AUTH_SECRET (openssl rand -base64 48)
 npm run db:reset              # creates data/golfday.db, applies schema, seeds a demo
 npm run dev                   # http://localhost:3000
 ```

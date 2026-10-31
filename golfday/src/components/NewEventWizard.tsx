@@ -59,6 +59,12 @@ export function NewEventWizard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [selectedHoles, setSelectedHoles] = useState<CardHole[] | null>(null);
+  /**
+   * A provider course chosen in step 2. It is NOT written to the library here:
+   * the import happens with the event creation, so a brand-new organiser can
+   * pick a course before they have any organiser permissions.
+   */
+  const [pendingProvider, setPendingProvider] = useState<{ externalId: string; label: string } | null>(null);
 
   const [manual, setManual] = useState({
     name: "",
@@ -93,6 +99,7 @@ export function NewEventWizard() {
   }, [query, mode]);
 
   async function chooseSaved(course: SavedCourse) {
+    setPendingProvider(null);
     setSelectedId(course.id);
     setSelectedLabel(`${course.name}${course.club ? `, ${course.club}` : ""}`);
     const res = await fetch(`/api/courses/${course.id}`, { cache: "no-store" });
@@ -102,55 +109,48 @@ export function NewEventWizard() {
     }
   }
 
-  async function chooseProvider(course: ProviderCourse) {
-    setBusy(true);
-    setError(null);
+  function chooseProvider(course: ProviderCourse) {
+    // Catalogue courses are already seeded into the library - reuse that row.
     if (course.source === "CATALOGUE") {
-      // catalogue courses are already in the library after seeding; import if not
       const match = saved.find((s) => s.name === course.name && (s.club ?? "") === course.club);
       if (match) {
+        setPendingProvider(null);
         setSelectedId(match.id);
-        setSelectedLabel(`${match.name}, ${match.club}`);
-        setBusy(false);
+        setSelectedLabel(`${match.name}${match.club ? `, ${match.club}` : ""}`);
         return;
       }
     }
-    const res = await fetch("/api/courses/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ externalId: course.externalId }),
-    });
-    const data = await res.json();
-    setBusy(false);
-    if (!res.ok) { setError(data.error ?? "Could not import that course"); return; }
-    setSelectedId(data.courseId);
+    // Otherwise remember the provider id; it is imported when the golf day is
+    // created, so this works for a first-time organiser with no permissions yet.
+    setSelectedId(null);
+    setPendingProvider({ externalId: course.externalId, label: `${course.name}${course.club ? `, ${course.club}` : ""}` });
     setSelectedLabel(`${course.name}${course.club ? `, ${course.club}` : ""}`);
-    setSelectedHoles(course.holes);
+    setSelectedHoles(course.holes as CardHole[]);
   }
 
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      let courseId = selectedId;
+      // Course details travel with the event: the API saves the course and
+      // makes this user its author, which is how a first-time organiser gets
+      // started without library permissions.
+      const course: Record<string, unknown> = {};
+      // Only reuse a library id in search mode - switching to "type a new
+      // course" must not silently keep the earlier selection.
+      if (mode === "search" && selectedId) course.courseId = selectedId;
       if (mode === "manual") {
         if (!manual.name.trim()) throw new Error("Give the course a name");
-        const courseRes = await fetch("/api/courses", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: manual.name,
-            club: manual.club,
-            address: manual.address,
-            country: "England",
-            tees: [{ name: manual.teeName, colour: manual.teeName.toLowerCase(), slope: manual.slope, rating: manual.rating, par: manual.par }],
-            holes: manualCard,
-            source: "MANUAL",
-          }),
-        });
-        const courseData = await courseRes.json();
-        if (!courseRes.ok) throw new Error(courseData.error ?? "Could not save the course");
-        courseId = courseData.courseId;
+        course.newCourse = {
+          name: manual.name,
+          club: manual.club || null,
+          address: manual.address || null,
+          country: "England",
+          tees: [{ name: manual.teeName, colour: manual.teeName.toLowerCase(), slope: manual.slope, rating: manual.rating, par: manual.par }],
+          holes: manualCard,
+        };
+      } else if (pendingProvider) {
+        course.importExternalId = pendingProvider.externalId;
       }
 
       const res = await fetch("/api/events", {
@@ -161,7 +161,7 @@ export function NewEventWizard() {
           description: form.description || undefined,
           date: form.date,
           startTime: form.startTime,
-          courseId: courseId ?? null,
+          ...course,
           format: form.format,
           handicapAllowance: Number(form.handicapAllowance),
           maxPlayers: Number(form.maxPlayers),
@@ -181,7 +181,7 @@ export function NewEventWizard() {
   }
 
   const step1Valid = form.name.trim().length > 2;
-  const canCreate = step1Valid && (mode !== "search" || Boolean(selectedId));
+  const canCreate = step1Valid && (mode !== "search" || Boolean(selectedId ?? pendingProvider));
 
   const preview = useMemo(() => {
     if (mode === "manual") return manualCard;
@@ -317,7 +317,7 @@ export function NewEventWizard() {
                   <p className="col-span-2 py-4 text-center text-[13px] text-ink/45">No courses match. Try “Type a new course”.</p>
                 )}
               </div>
-              {selectedId && (
+              {(selectedId ?? pendingProvider) && (
                 <div className="rounded-xl bg-fairway-50 p-3 ring-1 ring-inset ring-fairway-200">
                   <p className="text-[13px] font-semibold text-fairway-900">Selected: {selectedLabel}</p>
                   <p className="text-[12px] text-fairway-800/70">The full 18-hole card will be snapshotted onto the event - you can still tweak par and stroke index afterwards.</p>

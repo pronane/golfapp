@@ -14,6 +14,8 @@ import {
   users,
 } from "@/db/schema";
 import { ApiError } from "./http";
+import { saveCourse } from "./courses";
+import { fetchCourse } from "./courseApi";
 import { courseHandicap, DEFAULT_TEE, parseTees, playingHandicap as calcPlayingHandicap, type Tee } from "./handicap";
 import { newId, newJoinCode, newToken, uniqueSlug } from "./ids";
 import { type EventStatus } from "./status";
@@ -138,6 +140,22 @@ export type CreateEventInput = {
   createdBy: string;
   /** optional explicit card, used when an admin types in a brand new course */
   holes?: { holeNumber: number; par: number; strokeIndex: number }[];
+  /**
+   * Course details supplied while creating the golf day. Saved to the shared
+   * library with the creator as author - this is how a first-time organiser adds
+   * a course without needing library permissions up front.
+   */
+  newCourse?: {
+    name: string;
+    club?: string | null;
+    address?: string | null;
+    city?: string | null;
+    country?: string | null;
+    tees?: unknown;
+    holes: { holeNumber: number; par: number; strokeIndex: number }[];
+  };
+  /** Provider course to import and attach in the same request. */
+  importExternalId?: string | null;
 };
 
 export const DEFAULT_CARD: { holeNumber: number; par: number; strokeIndex: number }[] = [
@@ -166,10 +184,62 @@ export async function createEvent(input: CreateEventInput) {
   const slug = uniqueSlug(input.name);
   const joinCode = newJoinCode();
 
+  // A course can arrive three ways: an id from the library, details typed in
+  // with the event, or a provider id to import. All of them end up as a course
+  // row authored by the person creating the event, who becomes its OWNER.
+  let courseId = input.courseId ?? null;
+
+  if (!courseId && input.newCourse) {
+    const saved = await saveCourse(
+      {
+        name: input.newCourse.name,
+        club: input.newCourse.club,
+        address: input.newCourse.address,
+        city: input.newCourse.city,
+        country: input.newCourse.country,
+        tees: input.newCourse.tees,
+        holes: input.newCourse.holes,
+        source: "MANUAL",
+      },
+      input.createdBy,
+    );
+    courseId = saved.courseId;
+  }
+
+  if (!courseId && input.importExternalId) {
+    const provider = await fetchCourse(input.importExternalId);
+    if (!provider) throw new ApiError(404, "That course could not be loaded from the provider", "not_found");
+    if (provider.holes.length < 9) {
+      throw new ApiError(422, "That course does not have a full scorecard", "incomplete_card");
+    }
+    const saved = await saveCourse(
+      {
+        name: provider.name,
+        club: provider.club,
+        address: provider.address ?? null,
+        city: provider.city ?? null,
+        country: provider.country ?? "England",
+        latitude: provider.latitude ?? null,
+        longitude: provider.longitude ?? null,
+        tees: provider.tees,
+        holes: provider.holes.map((h) => ({
+          holeNumber: h.holeNumber,
+          par: h.par,
+          strokeIndex: h.strokeIndex,
+          yards: h.yards,
+        })),
+        externalId: provider.externalId,
+        source: provider.source,
+      },
+      input.createdBy,
+    );
+    courseId = saved.courseId;
+  }
+
   let card = input.holes;
   let courseName: string | null = null;
-  if (input.courseId) {
-    const course = await getCourseWithHoles(input.courseId);
+  if (courseId) {
+    const course = await getCourseWithHoles(courseId);
     if (!course) throw new ApiError(404, "Course not found", "course_not_found");
     courseName = [course.course.name, course.course.club].filter(Boolean).join(", ");
     if (!card) {
@@ -188,7 +258,7 @@ export async function createEvent(input: CreateEventInput) {
     description: input.description?.trim() || null,
     date: input.date,
     startTime: input.startTime || "08:00",
-    courseId: input.courseId ?? null,
+    courseId,
     courseName,
     format: input.format ?? "STABLEFORD",
     handicapAllowance: input.handicapAllowance ?? 95,

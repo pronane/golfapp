@@ -50,6 +50,8 @@ export const POST = route(async (request: Request) => {
     status: body.status,
     isPublic: body.isPublic,
     holes: body.holes,
+    newCourse: body.newCourse,
+    importExternalId: body.importExternalId ?? null,
     createdBy: user.id,
   });
   return json({ event: created }, { status: 201 });

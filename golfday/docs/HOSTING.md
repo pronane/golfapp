@@ -62,7 +62,9 @@ vercel --prod
 Notes:
 
 * `AUTH_SECRET` must be a long random string (`openssl rand -base64 48`). Changing it logs
-  everybody out.
+  everybody out. The app refuses to boot in production if it is missing, shorter than 32
+  characters, or still looks like a placeholder (`change-me`, `your-secret`, ...), because a
+  guessable secret lets anybody forge a login cookie.
 * The SSE route (`/api/events/[id]/stream`) declares `runtime = "nodejs"` so it can hold a
   long-lived response. On Vercel's free tier a function may run up to 60 s per invocation
   (Hobby), so the client's `EventSource` reconnects automatically when the stream is cut -
