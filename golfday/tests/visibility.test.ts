@@ -17,6 +17,15 @@ vi.mock("@/lib/http", () => ({
     user && access.admins.has(`${eventId}:${user.id}`) ? { role: "OWNER", isAdmin: true } : null,
 }));
 
+const entries = vi.hoisted(() => ({ registered: new Set<string>(), tokens: new Map<string, string>() }));
+
+vi.mock("@/lib/events", () => ({
+  getEventBundle: async () => null,
+  getRevision: async () => 0,
+  isRegisteredPlayer: async (eventId: string, playerId: string) => entries.registered.has(`${eventId}:${playerId}`),
+  groupTokenEventId: async (token: string) => entries.tokens.get(token) ?? null,
+}));
+
 const { canViewEventBoard } = await import("@/lib/leaderboard");
 
 const publicEvent = { id: "evt-public", isPublic: true };
@@ -46,5 +55,21 @@ describe("who can watch a live board", () => {
     // ...and not to an organiser of a different event
     session.user = { id: "other-organiser", playerId: "p4", isSiteAdmin: false };
     expect(await canViewEventBoard(privateEvent)).toBe(false);
+  });
+
+  it("lets players entered in a private golf day watch their own board", async () => {
+    session.user = { id: "entrant", playerId: "p9", isSiteAdmin: false };
+    expect(await canViewEventBoard(privateEvent)).toBe(false);
+    entries.registered.add("evt-private:p9");
+    expect(await canViewEventBoard(privateEvent)).toBe(true);
+  });
+
+  it("lets a group scoring link follow its own private board, and no other", async () => {
+    session.user = null;
+    entries.tokens.set("tok-private", "evt-private");
+    entries.tokens.set("tok-elsewhere", "evt-other");
+    expect(await canViewEventBoard(privateEvent, "tok-private")).toBe(true);
+    expect(await canViewEventBoard(privateEvent, "tok-elsewhere")).toBe(false);
+    expect(await canViewEventBoard(privateEvent, "made-up")).toBe(false);
   });
 });

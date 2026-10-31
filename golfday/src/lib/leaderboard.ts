@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { eventPlayers, groups, players, scores } from "@/db/schema";
 import { getCurrentUser } from "./auth";
-import { getEventBundle, getRevision } from "./events";
+import { getEventBundle, getRevision, groupTokenEventId, isRegisteredPlayer } from "./events";
 import { getEventAccess } from "./http";
 import { rankStandings, summariseRound, type Standing } from "./scoring";
 import { buildGames, getGameSettings, listSideEntries, type GamesPayload, type SideHole } from "./games";
@@ -71,15 +71,23 @@ export function toPublicEvent(event: {
 
 /**
  * A public golf day's live board is readable by anyone - that is the point of the
- * shareable link. A private one (`events.is_public = 0`) is readable only by the
- * people who run it: its scorecard tokens and entry details should not leak just
- * because somebody guessed a slug.
+ * shareable link. A private one (`events.is_public = 0`) is readable by the
+ * people who run it, the players entered in it, and whoever holds one of its
+ * group scoring links - not by somebody who guessed a slug.
  */
-export async function canViewEventBoard(event: { id: string; isPublic: boolean }): Promise<boolean> {
+export async function canViewEventBoard(
+  event: { id: string; isPublic: boolean },
+  scoringToken?: string | null,
+): Promise<boolean> {
   if (event.isPublic) return true;
+  // A group's scoring link is already the key to that card, so whoever holds it
+  // can follow the board it feeds (the scorecard's live top five).
+  if (scoringToken && (await groupTokenEventId(scoringToken)) === event.id) return true;
   const user = await getCurrentUser();
   if (!user) return false;
-  return Boolean(await getEventAccess(event.id, user));
+  if (await getEventAccess(event.id, user)) return true;
+  // Players entered in a private golf day can watch their own leaderboard.
+  return user.playerId ? isRegisteredPlayer(event.id, user.playerId) : false;
 }
 
 /**

@@ -703,3 +703,19 @@ export async function listEventsByIds(ids: string[]) {
   if (ids.length === 0) return [];
   return db.select().from(events).where(inArray(events.id, ids));
 }
+
+/** The event a group scoring token belongs to, or null if the token is unknown. */
+export async function groupTokenEventId(token: string): Promise<string | null> {
+  const [group] = await db.select({ eventId: groups.eventId }).from(groups).where(eq(groups.token, token)).limit(1);
+  return group?.eventId ?? null;
+}
+
+/** Is this player entered (not withdrawn or waitlisted) in the event? */
+export async function isRegisteredPlayer(eventId: string, playerId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ status: eventPlayers.status })
+    .from(eventPlayers)
+    .where(and(eq(eventPlayers.eventId, eventId), eq(eventPlayers.playerId, playerId)))
+    .limit(1);
+  return row?.status === "REGISTERED";
+}

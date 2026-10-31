@@ -16,7 +16,8 @@ export async function GET(request: Request, ctx: Ctx) {
   // Same rule as the JSON board: private golf days only stream to the people
   // who run them, and answer 404 so the id is not confirmed.
   const event = await getEventById(id);
-  if (!event || !(await canViewEventBoard(event))) {
+  const scoringToken = new URL(request.url).searchParams.get("token");
+  if (!event || !(await canViewEventBoard(event, scoringToken))) {
     return Response.json({ error: "Event not found" }, { status: 404 });
   }
   const lite = new URL(request.url).searchParams.get("lite") === "1";

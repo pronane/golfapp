@@ -80,7 +80,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
     };
   }, [token, sync, refreshCard]);
 
-  const { board, status } = useLiveBoard(initial.event.id, initialBoard, true);
+  const { board, status } = useLiveBoard(initial.event.id, initialBoard, true, initial.group.token);
   const topFive = (board?.standings ?? initialBoard?.standings ?? []).filter((s) => s.thru > 0).slice(0, 5);
 
   const activePlayer = card.players.find((p) => p.id === activePlayerId) ?? card.players[0];
