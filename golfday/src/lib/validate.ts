@@ -61,7 +61,7 @@ export const createEventSchema = z.object({
   date: dateString,
   startTime: timeString.default("08:00"),
   courseId: z.string().min(1).nullable().optional(),
-  format: z.enum(["STABLEFORD", "STROKE_PLAY"]).default("STABLEFORD"),
+  format: z.enum(["STABLEFORD", "STROKE_PLAY", "TEXAS_SCRAMBLE"]).default("STABLEFORD"),
   handicapAllowance: z.coerce.number().int().min(0).max(100).default(95),
   maxPlayers: z.coerce.number().int().min(1).max(200).default(72),
   status: z.enum(["DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).default("DRAFT"),
@@ -71,6 +71,8 @@ export const createEventSchema = z.object({
   newCourse: newCourseSchema.optional(),
   /** Provider course to import and attach while creating the event. */
   importExternalId: z.string().max(80).optional(),
+  /** Society whose fixture list this golf day belongs to (the caller must run it). */
+  societyId: z.string().min(1).nullable().optional(),
 });
 
 export const updateEventSchema = z.object({
@@ -79,7 +81,7 @@ export const updateEventSchema = z.object({
   date: dateString.optional(),
   startTime: timeString.optional(),
   courseId: z.string().nullable().optional(),
-  format: z.enum(["STABLEFORD", "STROKE_PLAY"]).optional(),
+  format: z.enum(["STABLEFORD", "STROKE_PLAY", "TEXAS_SCRAMBLE"]).optional(),
   handicapAllowance: z.coerce.number().int().min(0).max(100).optional(),
   maxPlayers: z.coerce.number().int().min(1).max(200).optional(),
   status: z.enum(["DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),

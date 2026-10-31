@@ -14,6 +14,7 @@ export function Nav({ user }: { user: SessionUser | null }) {
         <nav className="ml-4 hidden items-center gap-1 text-sm font-medium text-ink/65 sm:flex">
           <Link className="rounded-lg px-3 py-2 hover:bg-ink/[0.04]" href="/events">Events</Link>
           {user && <Link className="rounded-lg px-3 py-2 hover:bg-ink/[0.04]" href="/dashboard">My golf</Link>}
+          {user && <Link className="rounded-lg px-3 py-2 hover:bg-ink/[0.04]" href="/societies">Societies</Link>}
           {user && <Link className="rounded-lg px-3 py-2 hover:bg-ink/[0.04]" href="/admin">Organiser</Link>}
         </nav>
         <div className="ml-auto flex items-center gap-2">

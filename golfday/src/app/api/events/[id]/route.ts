@@ -1,12 +1,13 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { eventHoles, events } from "@/db/schema";
+import { eventHoles, events, seasonEvents, societyEvents } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { ApiError, getEventAccess, json, parseJson, requireEventAccess, requireUser, route } from "@/lib/http";
 import { bumpRevision, getCourseWithHoles, getEventBundle, recalculateHandicaps } from "@/lib/events";
 import { newId } from "@/lib/ids";
 import { updateEventSchema, validate } from "@/lib/validate";
 import { deleteEventGames } from "@/lib/games";
+import { deleteScrambleScoresForEvent } from "@/lib/scrambleScores";
 import { deleteEventPayments } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
@@ -90,5 +91,9 @@ export const DELETE = route(async (_request: Request, ctx: Ctx) => {
   await db.delete(events).where(eq(events.id, id));
   await deleteEventGames(id);
   await deleteEventPayments(id);
+  // Team cards, society fixture links and season entries must not outlive the day.
+  await deleteScrambleScoresForEvent(id);
+  await db.delete(societyEvents).where(eq(societyEvents.eventId, id));
+  await db.delete(seasonEvents).where(eq(seasonEvents.eventId, id));
   return json({ ok: true });
 });

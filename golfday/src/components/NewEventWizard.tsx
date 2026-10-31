@@ -32,7 +32,7 @@ const todayPlus = (days: number) => {
   return date.toISOString().slice(0, 10);
 };
 
-export function NewEventWizard() {
+export function NewEventWizard({ societyId = null }: { societyId?: string | null }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -43,7 +43,7 @@ export function NewEventWizard() {
     description: "",
     date: todayPlus(14),
     startTime: "08:30",
-    format: "STABLEFORD" as "STABLEFORD" | "STROKE_PLAY",
+    format: "STABLEFORD" as "STABLEFORD" | "STROKE_PLAY" | "TEXAS_SCRAMBLE",
     handicapAllowance: 95,
     maxPlayers: 48,
     isPublic: true,
@@ -167,6 +167,7 @@ export function NewEventWizard() {
           maxPlayers: Number(form.maxPlayers),
           isPublic: form.isPublic,
           status: form.status,
+          ...(societyId ? { societyId } : {}),
         }),
       });
       const data = await res.json();
@@ -230,6 +231,7 @@ export function NewEventWizard() {
               <select id="format" className="select" value={form.format} onChange={(e) => set("format", e.target.value as typeof form.format)}>
                 <option value="STABLEFORD">Stableford (points)</option>
                 <option value="STROKE_PLAY">Stroke play (net)</option>
+                <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
               </select>
             </div>
             <div>
@@ -400,7 +402,12 @@ export function NewEventWizard() {
             <Row label="Event" value={form.name} />
             <Row label="When" value={`${form.date} · first tee ${form.startTime}`} />
             <Row label="Course" value={mode === "later" ? "To be confirmed" : mode === "manual" ? `${manual.name}${manual.club ? `, ${manual.club}` : ""}` : selectedLabel ?? "—"} />
-            <Row label="Format" value={`${form.format === "STABLEFORD" ? "Stableford" : "Net stroke play"} · ${form.handicapAllowance}% allowance`} />
+            <Row
+              label="Format"
+              value={`${form.format === "STABLEFORD" ? "Stableford" : form.format === "TEXAS_SCRAMBLE" ? "Texas scramble" : "Net stroke play"} · ${
+                form.format === "TEXAS_SCRAMBLE" ? "scramble team handicap" : `${form.handicapAllowance}% allowance`
+              }`}
+            />
             <Row label="Field" value={`up to ${form.maxPlayers} players`} />
             <Row label="Visibility" value={form.isPublic ? "Public" : "Private"} />
           </dl>

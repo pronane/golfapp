@@ -1,6 +1,7 @@
 # GolfDay
 
-Live scoring, entries and leaderboards for golf days, outings and society meets.
+Live scoring, entries and leaderboards for golf days, outings and society meets -
+with Texas scrambles, society fixture lists, season orders of merit and real Stripe refunds.
 
 GolfDay is a **new Next.js application that lives alongside the original Spring Boot /
 React prototype in this repository** (see `../src`, `../reactSrc`). Nothing in the old
@@ -14,7 +15,7 @@ golfday/
 ├── src/db           # Drizzle schema + raw SQL DDL + libSQL client
 ├── src/lib          # scoring, WHS handicaps, auth, catalogue, integrations
 ├── scripts          # db push + demo seed
-├── tests            # vitest unit tests (scoring, handicaps, CSV import)
+├── tests            # vitest unit tests (scoring, scrambles, seasons, refunds, permissions)
 ├── demo             # demo videos (narrated), recorder + mix scripts, cue sheets
 └── docs             # hosting + integrations notes, screenshots
 ```
@@ -45,7 +46,7 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # unit tests
+npm test           # 83 unit tests
 ```
 
 ---
@@ -99,6 +100,27 @@ MP4 and the full script for all three. Static screenshots of every screen are in
 * **Join code** so players can enter themselves, and **claim codes** so a guest player added by an organiser can later take ownership of their record.
 * **Revisions + SSE** instead of websockets: every write bumps `event_state.revision`, the stream pushes the board when it changes. This keeps it serverless-friendly.
 
+### Formats, societies and seasons
+
+* **Texas scramble** - a team card instead of four individual ones. Set the format when
+  you create the day; each tee group is a team, a hole takes one gross score, and the
+  team handicap is the England Golf scramble allowance (25/20/15/10 of the players'
+  course handicaps, lowest first). The card also records **whose drive was used** on
+  every hole, counts them and warns when a player still owes drives under the
+  minimum-drives rule (four each in a four-ball). The live board, the clubhouse TV and
+  the group scorecard all switch to team mode, and team cards keep their own audit trail.
+* **Societies** (`/societies`) - create a club, share its six-character code, and get a
+  roster with handicaps, a fixture list and seasons in one place. Roles are owner,
+  secretary and member: owners and secretaries can add fixtures, manage the roster and
+  create seasons; members can join and leave. A golf day created from a society page
+  lands on that fixture list automatically, and a roster carries guest players who have
+  no login yet.
+* **Seasons and the order of merit** (`/seasons/<slug>`) - attach fixtures to a season and
+  the table builds itself from the live boards. Positions score 100-90-80-75… down the
+  field (or sum Stableford points instead), ties share the position, and a **best-N**
+  rule can count only a player's best results while still showing everything played.
+  Texas scramble fixtures count too: each team member earns the team's result.
+
 ### Games, money and the clubhouse screen
 
 Set up in the organiser console's **Games** and **Payments** tabs.
@@ -108,6 +130,7 @@ Set up in the organiser console's **Games** and **Payments** tabs.
 * **Better-ball pairs (4BBB)** - pair each tee group automatically (1+2, 3+4); each hole counts the better Stableford score.
 * **Ryder Cup-style match play** - name the two teams, add singles or fourball matches (or auto-draw balanced singles). Strokes are taken off the low handicap in each match; the board shows each match ("2 UP thru 11", "3&2"), banked points and projected points.
 * **Entry fees** - set a fee; with `STRIPE_SECRET_KEY` players get a "Pay entry" button (Stripe Checkout, verified with Stripe on return, no webhook needed). Organisers can always mark cash or bank transfers as paid.
+* **Real refunds** - the Payments tab refunds a card entry **through Stripe** (`POST /v1/refunds` against the PaymentIntent), in full or in part, with a reason. The amount is checked against what is left of that payment, so a part-refund can be followed by another and a double refund is impossible. Every refund is kept in a ledger (`payment_refunds`), the entry moves to partially-refunded or refunded, and the "collected" figure is money taken less money given back. Cash entries are recorded the same way, by hand.
 * **Sponsors** along the live board, and a **clubhouse TV mode** at `/live/<slug>?tv=1`: full-screen, big type, the leaderboard scrolls itself, games alongside, sponsors along the bottom.
 * **Offline scoring** - with no signal, scores are kept on the phone ("3 saved on this phone · will sync") and sent automatically when the connection returns.
 
@@ -152,6 +175,7 @@ logging in.
 | POST | `/api/events/[id]/auto-groups` | balanced four-balls + tee times |
 | PUT | `/api/events/[id]/holes` | amend the day's card |
 | GET | `/api/events/[id]/leaderboard` | JSON leaderboard (polling fallback) |
+| POST | `/api/scramble` | enter a Texas scramble team hole (group token, admin or team member) |
 | GET | `/api/events/[id]/stream` | **SSE live leaderboard** (`?lite=1` for top 5) |
 | GET | `/api/events/[id]/export` | CSV of the card |
 | POST | `/api/events/[id]/admins`, DELETE `…/admins/[userId]` | manage admins/scorers |
@@ -161,6 +185,14 @@ logging in.
 | GET | `/api/courses/search` | GolfCourseAPI + catalogue search |
 | POST | `/api/courses/import` | save a provider course locally |
 | GET/POST | `/api/players`, `/api/players/import`, PATCH `/api/players/me` | players, CSV import, handicap refresh |
+| GET/POST | `/api/societies`, `/api/societies/join` | my societies, start one, join with a code |
+| GET/PATCH | `/api/societies/[id]` | society, roster and fixtures |
+| POST/DELETE | `/api/societies/[id]/members` | add / remove a member (secretary tools) |
+| POST/DELETE | `/api/societies/[id]/events` | put a golf day on the fixture list |
+| GET/POST | `/api/seasons` | seasons (optionally by `?societyId=`) and create |
+| GET/PATCH/DELETE | `/api/seasons/[id]` | order of merit table, edit, delete |
+| POST/DELETE | `/api/seasons/[id]/events` | count a fixture in the season |
+| POST | `/api/events/[id]/payments/refund` | refund an entry fee (full or partial, Stripe) |
 | GET | `/api/golfengland/search` | handicap directory lookup |
 
 ---

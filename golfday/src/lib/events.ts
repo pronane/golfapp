@@ -11,10 +11,12 @@ import {
   groups,
   players,
   scores,
+  societyEvents,
   users,
 } from "@/db/schema";
 import { ApiError } from "./http";
 import { saveCourse } from "./courses";
+import { deleteScrambleScoresForGroup } from "./scrambleScores";
 import { fetchCourse } from "./courseApi";
 import { courseHandicap, DEFAULT_TEE, parseTees, playingHandicap as calcPlayingHandicap, type Tee } from "./handicap";
 import { newId, newJoinCode, newToken, uniqueSlug } from "./ids";
@@ -132,7 +134,7 @@ export type CreateEventInput = {
   date: string;
   startTime?: string;
   courseId?: string | null;
-  format?: "STABLEFORD" | "STROKE_PLAY";
+  format?: "STABLEFORD" | "STROKE_PLAY" | "TEXAS_SCRAMBLE";
   handicapAllowance?: number;
   maxPlayers?: number;
   status?: EventStatus;
@@ -156,6 +158,8 @@ export type CreateEventInput = {
   };
   /** Provider course to import and attach in the same request. */
   importExternalId?: string | null;
+  /** Society whose fixture list the day belongs to. */
+  societyId?: string | null;
 };
 
 export const DEFAULT_CARD: { holeNumber: number; par: number; strokeIndex: number }[] = [
@@ -285,6 +289,9 @@ export async function createEvent(input: CreateEventInput) {
     role: "OWNER",
   });
   await db.insert(eventState).values({ eventId: id, revision: 1 });
+  if (input.societyId) {
+    await db.insert(societyEvents).values({ id: newId(), societyId: input.societyId, eventId: id });
+  }
 
   return { id, slug };
 }
@@ -593,6 +600,8 @@ export async function createGroup(eventId: string, name?: string, teeTime?: stri
 export async function deleteGroup(eventId: string, groupId: string) {
   await db.update(eventPlayers).set({ groupId: null }).where(eq(eventPlayers.groupId, groupId));
   await db.delete(groups).where(and(eq(groups.id, groupId), eq(groups.eventId, eventId)));
+  // A scramble team's card belongs to the group, so it goes with it.
+  await deleteScrambleScoresForGroup(eventId, groupId);
   await bumpRevision(eventId);
 }
 

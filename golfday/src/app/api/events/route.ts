@@ -4,6 +4,7 @@ import { eventPlayers, events } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { json, parseJson, requireUser, route } from "@/lib/http";
 import { createEvent, listEventsForAdmin, listEventsForPlayer, listPublicEvents } from "@/lib/events";
+import { requireSocietyRole } from "@/lib/societies";
 import { createEventSchema, validate } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,8 @@ export const GET = route(async (request: Request) => {
 export const POST = route(async (request: Request) => {
   const user = await requireUser();
   const body = validate(createEventSchema, await parseJson(request));
+  // A golf day can only join a society the creator actually runs.
+  if (body.societyId) await requireSocietyRole(user, body.societyId);
   const created = await createEvent({
     name: body.name,
     description: body.description,
@@ -52,6 +55,7 @@ export const POST = route(async (request: Request) => {
     holes: body.holes,
     newCourse: body.newCourse,
     importExternalId: body.importExternalId ?? null,
+    societyId: body.societyId ?? null,
     createdBy: user.id,
   });
   return json({ event: created }, { status: 201 });

@@ -110,3 +110,44 @@ event's allowance recalculates every playing handicap in it.
 **Compliance note:** a handicap index is personal data. Handicaps are copied into the event
 snapshot so a played round is reproducible; if you need to honour deletion requests, add a
 hard delete in the admin console that also clears `event_players.handicap_index`.
+
+---
+
+## 3. Stripe payments and refunds
+
+Entry fees are charged with **Stripe Checkout** and refunded with **Stripe Refunds**,
+both over Stripe's REST API - there is no SDK and no webhook to host.
+
+```
+STRIPE_SECRET_KEY="sk_test_..."
+```
+
+### Taking the fee
+
+The organiser sets a fee in the console's **Games** tab. A player then gets a *Pay entry*
+button; `POST /api/events/[id]/payments/checkout` creates a Checkout Session and the
+return leg (`…/payments/confirm?session_id=…`) re-reads the session from Stripe before
+marking the entry paid - the query string alone proves nothing.
+
+### Giving it back
+
+The **Payments** tab has a *Refund* action per player, for the whole entry fee or part
+of it (`POST /api/events/[id]/payments/refund`, organiser only):
+
+* Card payments are refunded **against the PaymentIntent** (`POST /v1/refunds`), with
+  `metadata[eventId]` / `metadata[playerId]` attached so the refund is traceable in the
+  Stripe dashboard. The PaymentIntent is stored when Checkout completes; for older
+  entries it is recovered from the Checkout Session on first refund.
+* The amount is checked against **what is left of that payment**, not the fee, so a
+  part-refund can be followed by another and a double refund is impossible
+  (`409 already_refunded` / `400 refund_too_large`).
+* Every refund is written to `payment_refunds` (amount, Stripe refund id, reason, who
+  did it), and the entry moves to `PARTIALLY_REFUNDED` or `REFUNDED`. The organiser's
+  collected figure is money taken **less** everything refunded.
+* Cash / bank-transfer entries have no card to refund: the same ledger records them as
+  returned by hand, so the books still add up.
+* If Stripe has no PaymentIntent on file the API refuses (`409 no_payment_intent`)
+  rather than pretending - refund it in the Stripe dashboard, then record it here.
+
+Refunds made *in the Stripe dashboard* do not flow back into GolfDay (that would need a
+webhook endpoint); use the console, or record the manual equivalent.

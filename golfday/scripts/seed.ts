@@ -12,13 +12,22 @@ import {
   courses,
   eventAdmins,
   eventHoles,
+  eventPayments,
   eventPlayers,
+  eventSettings,
   eventState,
   events,
   groups,
+  paymentRefunds,
   players,
   scoreAudit,
   scores,
+  scrambleScores,
+  seasonEvents,
+  seasons,
+  societyEvents,
+  societyMembers,
+  societies,
   users,
 } from "../src/db/schema";
 import { pushSchema } from "../src/db/push";
@@ -52,9 +61,10 @@ function mulberry32(seed: number) {
 async function wipe() {
   console.log("🧹  wiping demo data…");
   const tables = [
-    "event_payments", "side_game_entries", "event_pairs", "event_settings",
-    "score_audit", "scores", "event_players", "groups", "event_admins",
-    "event_holes", "event_state", "events", "course_holes", "courses", "players", "users",
+    "payment_refunds", "event_payments", "side_game_entries", "event_pairs", "event_settings",
+    "scramble_audit", "scramble_scores", "score_audit", "scores", "event_players", "groups", "event_admins",
+    "event_holes", "event_state", "season_events", "seasons", "society_events", "society_members", "societies",
+    "events", "course_holes", "courses", "players", "users",
   ];
   for (const table of tables) await client.execute(`DELETE FROM ${table}`);
 }
@@ -252,6 +262,7 @@ async function main() {
   ];
 
   let seedOffset = 1;
+  const eventIdsByName: Record<string, string> = {};
   for (const seed of eventSeeds) {
     const eventId = newId();
     const courseId = courseIds[seed.courseKey];
@@ -298,6 +309,7 @@ async function main() {
       role: "ADMIN",
     });
     await db.insert(eventState).values({ eventId, revision: 1 });
+    eventIdsByName[seed.name] = eventId;
 
     const tees = parseTees(JSON.stringify(catalogueCourse.tees));
     const tee = tees[0];
@@ -366,6 +378,196 @@ async function main() {
     }
     console.log(`🏌️  ${seed.name} (${seed.status}) - ${seed.roster.groups.flat().length} players, par ${par}`);
   }
+
+  // ---------- a Texas scramble day, played last month ----------
+  const scrambleId = newId();
+  const scrambleCourseKey = sunningdale;
+  const scrambleCourse = CATALOGUE.find((c) => `${c.club} ${c.name}` === scrambleCourseKey)!;
+  const scrambleSlug = `${slugify("Captains Scramble")}-${newToken().slice(0, 4)}`;
+  const scrambleDate = daysFromNow(-34);
+  await db.insert(events).values({
+    id: scrambleId,
+    slug: scrambleSlug,
+    name: "Captains' Scramble",
+    description: "Texas scramble, teams of four. Every player's drive has to be used at least four times - the card tracks it.",
+    date: scrambleDate,
+    startTime: "09:30",
+    courseId: courseIds[scrambleCourseKey],
+    courseName: `${scrambleCourse.name}, ${scrambleCourse.club}`,
+    format: "TEXAS_SCRAMBLE",
+    handicapAllowance: 100,
+    status: "COMPLETED",
+    maxPlayers: 48,
+    joinCode: newJoinCode(),
+    isPublic: true,
+    createdBy: userIds["admin@golfday.app"],
+  });
+  await db.insert(eventHoles).values(
+    scrambleCourse.pars.map((p, i) => ({
+      id: newId(),
+      eventId: scrambleId,
+      holeNumber: i + 1,
+      par: p,
+      strokeIndex: scrambleCourse.strokeIndexes[i],
+    })),
+  );
+  await db.insert(eventAdmins).values({ id: newId(), eventId: scrambleId, userId: userIds["admin@golfday.app"], role: "OWNER" });
+  await db.insert(eventState).values({ eventId: scrambleId, revision: 1 });
+  await db.insert(eventSettings).values({ eventId: scrambleId, entryFeePence: 2500 });
+  eventIdsByName["Captains' Scramble"] = scrambleId;
+
+  const scrambleTees = parseTees(JSON.stringify(scrambleCourse.tees));
+  const scrambleTee = scrambleTees[0];
+  const scrambleTeams = [
+    { name: "Morgan's Marvels", players: ["Alex Morgan", "Tom Beresford", "Nina Petrova", "Daniel Okafor"], quality: 0.35 },
+    { name: "Whitcombe's Warriors", players: ["Sam Whitcombe", "Mei Chen", "Gareth Bowen", "Lucy Fielding"], quality: 0.15 },
+    { name: "Raman's Rascals", players: ["Priya Raman", "Callum Ó Dálaigh", "Ravi Shah", "Ella Fitzpatrick"], quality: 0.25 },
+  ];
+  const scrambleRandom = mulberry32(0x5f3759df);
+  for (let gi = 0; gi < scrambleTeams.length; gi++) {
+    const team = scrambleTeams[gi];
+    const groupId = newId();
+    const startMinutes = 9 * 60 + 30 + gi * 10;
+    await db.insert(groups).values({
+      id: groupId,
+      eventId: scrambleId,
+      name: team.name,
+      teeTime: `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(startMinutes % 60).padStart(2, "0")}`,
+      sortOrder: gi,
+      token: newToken(),
+    });
+    const teamMemberIds: string[] = [];
+    for (const name of team.players) {
+      const playerId = playerIdByName[name];
+      if (!playerId) continue;
+      teamMemberIds.push(playerId);
+      const guest = guests.find((g) => g.name === name);
+      const index = guest?.hcp ?? accountSeeds.find((a) => a.name === name)?.handicap ?? 10;
+      const ch = courseHandicap(index, scrambleTee);
+      await db.insert(eventPlayers).values({
+        id: newId(),
+        eventId: scrambleId,
+        playerId,
+        groupId,
+        status: "REGISTERED",
+        handicapIndex: index,
+        courseHandicap: ch,
+        playingHandicap: playingHandicap(ch, 100),
+        tee: scrambleTee.name,
+      });
+    }
+    for (let hole = 1; hole <= 18; hole++) {
+      const holePar = scrambleCourse.pars[hole - 1];
+      const roll = scrambleRandom();
+      let delta = 0;
+      if (roll < team.quality) delta = -1;
+      else if (roll < 0.8) delta = 0;
+      else delta = 1;
+      const strokes = Math.max(1, holePar + delta);
+      await db.insert(scrambleScores).values({
+        id: newId(),
+        eventId: scrambleId,
+        groupId,
+        holeNumber: hole,
+        strokes,
+        drivePlayerId: teamMemberIds[hole % Math.max(1, teamMemberIds.length)] ?? null,
+        recordedBy: "seed",
+      });
+    }
+  }
+  console.log(`🏌️  Captains' Scramble (COMPLETED) - ${scrambleTeams.length} teams, par ${scrambleCourse.pars.reduce((a, b) => a + b, 0)}`);
+
+  // two of the teams have paid their entry fee; one asked for £10 back
+  const paidPlayer = playerIdByName["Alex Morgan"];
+  const refundedPlayer = playerIdByName["Sam Whitcombe"];
+  await db.insert(eventPayments).values([
+    {
+      id: newId(),
+      eventId: scrambleId,
+      playerId: paidPlayer,
+      status: "PAID",
+      method: "STRIPE",
+      amountPence: 2500,
+      stripeSessionId: "cs_seed_paid",
+      stripePaymentIntent: "pi_seed_paid",
+      paidAt: daysFromNow(-40),
+    },
+    {
+      id: newId(),
+      eventId: scrambleId,
+      playerId: refundedPlayer,
+      status: "PARTIALLY_REFUNDED",
+      method: "STRIPE",
+      amountPence: 2500,
+      stripeSessionId: "cs_seed_partial",
+      stripePaymentIntent: "pi_seed_partial",
+      paidAt: daysFromNow(-40),
+      refundedPence: 1000,
+      refundedAt: daysFromNow(-33),
+    },
+  ]);
+  await db.insert(paymentRefunds).values({
+    id: newId(),
+    paymentId: (await db.select().from(eventPayments).where(sql`player_id = ${refundedPlayer}`))[0].id,
+    eventId: scrambleId,
+    playerId: refundedPlayer,
+    amountPence: 1000,
+    status: "SUCCEEDED",
+    stripeRefundId: "re_seed_partial",
+    reason: "requested_by_customer",
+    createdBy: userIds["admin@golfday.app"],
+    createdAt: daysFromNow(-33),
+  });
+
+  // ---------- society, fixtures and a season order of merit ----------
+  const societyId = newId();
+  await db.insert(societies).values({
+    id: societyId,
+    slug: `${slugify("Harrow Golf Society")}-${newToken().slice(0, 4)}`,
+    name: "Harrow Golf Society",
+    description: "A travelling society of 24 golfers. Fixtures through the year, a season order of merit and the odd Texas scramble.",
+    homeClub: "Sunningdale Golf Club",
+    joinCode: newJoinCode(),
+    createdBy: userIds["admin@golfday.app"],
+  });
+  const societyRoster: { name: string; role: "OWNER" | "SECRETARY" | "MEMBER" }[] = [
+    { name: "Alex Morgan", role: "OWNER" },
+    { name: "Sam Whitcombe", role: "SECRETARY" },
+    { name: "Priya Raman", role: "MEMBER" },
+    { name: "James Ellerton", role: "MEMBER" },
+    { name: "Tom Beresford", role: "MEMBER" },
+    { name: "Mei Chen", role: "MEMBER" },
+    { name: "Lucy Fielding", role: "MEMBER" },
+  ];
+  await db.insert(societyMembers).values(
+    societyRoster.map((member) => ({
+      id: newId(),
+      societyId,
+      playerId: playerIdByName[member.name],
+      role: member.role,
+      status: "ACTIVE",
+    })),
+  );
+  for (const eventId of Object.values(eventIdsByName)) {
+    await db.insert(societyEvents).values({ id: newId(), societyId, eventId });
+  }
+
+  const seasonId = newId();
+  await db.insert(seasons).values({
+    id: seasonId,
+    slug: `${slugify("Race to Harrow")}-${newToken().slice(0, 4)}`,
+    societyId,
+    name: "Race to Harrow",
+    startsOn: daysFromNow(-90),
+    endsOn: daysFromNow(90),
+    scheme: "POSITION",
+    bestOf: 0,
+    createdBy: userIds["admin@golfday.app"],
+  });
+  for (const name of ["Captains' Charity Day", "Captains' Scramble"]) {
+    await db.insert(seasonEvents).values({ id: newId(), seasonId, eventId: eventIdsByName[name] });
+  }
+  console.log("🏆  Harrow Golf Society, 4 fixtures and the Race to Harrow order of merit");
 
   // clear audit rows created by seeding (nothing to audit)
   await db.delete(scoreAudit);

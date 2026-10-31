@@ -226,6 +226,7 @@ export function EventConsole(props: Props) {
                 <select id="ev-format" className="select" value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })}>
                   <option value="STABLEFORD">Stableford</option>
                   <option value="STROKE_PLAY">Net stroke play</option>
+                  <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
                 </select>
               </div>
               <div>

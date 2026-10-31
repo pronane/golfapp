@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ApiError, json, parseJson, requireEventAccess, requireUser, route } from "@/lib/http";
 import { bumpRevision, getEventBundle } from "@/lib/events";
 import { getGameSettings } from "@/lib/games";
-import { listPayments, setPaidManually, stripeEnabled } from "@/lib/payments";
+import { listPayments, listRefunds, refundedTotal, setPaidManually, stripeEnabled } from "@/lib/payments";
 import { validate } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,13 @@ async function adminOnly(id: string) {
 export const GET = route(async (_request: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
   await adminOnly(id);
-  const [bundle, settings, payments] = await Promise.all([getEventBundle(id), getGameSettings(id), listPayments(id)]);
+  const [bundle, settings, payments, refunds, refunded] = await Promise.all([
+    getEventBundle(id),
+    getGameSettings(id),
+    listPayments(id),
+    listRefunds(id),
+    refundedTotal(id),
+  ]);
   if (!bundle) throw new ApiError(404, "Event not found", "not_found");
   const byPlayer = new Map(payments.map((p) => [p.playerId, p]));
   const rows = bundle.registrations
@@ -32,12 +38,27 @@ export const GET = route(async (_request: Request, ctx: Ctx) => {
         status: p?.status ?? "UNPAID",
         method: p?.method ?? null,
         amountPence: p?.amountPence ?? 0,
+        refundedPence: p?.refundedPence ?? 0,
+        refundedAt: p?.refundedAt ?? null,
+        // The PaymentIntent id stays server-side; the console only needs to know
+        // whether a card refund is possible.
+        refundableByCard: Boolean(p?.stripePaymentIntent && p?.method === "STRIPE"),
         paidAt: p?.paidAt ?? null,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
-  const collected = rows.filter((r) => r.status === "PAID").reduce((sum, r) => sum + r.amountPence, 0);
-  return json({ feePence: settings.entryFeePence, stripeEnabled: stripeEnabled(), collectedPence: collected, rows });
+  // Money actually in the bank: what was taken, less everything refunded.
+  const collected = rows
+    .filter((r) => r.status === "PAID" || r.status === "PARTIALLY_REFUNDED" || r.status === "REFUNDED")
+    .reduce((sum, r) => sum + r.amountPence - r.refundedPence, 0);
+  return json({
+    feePence: settings.entryFeePence,
+    stripeEnabled: stripeEnabled(),
+    collectedPence: collected,
+    refundedPence: refunded,
+    rows,
+    refunds,
+  });
 });
 
 const markSchema = z.object({ playerId: z.string().min(1), paid: z.boolean() });

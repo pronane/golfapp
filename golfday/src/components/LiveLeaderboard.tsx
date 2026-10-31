@@ -28,8 +28,10 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
     return () => clearInterval(timer);
   }, []);
 
-  const isStableford = data.event.format === "STABLEFORD";
-  const started = data.standings.some((s) => s.thru > 0);
+  const scramble = data.event.format === "TEXAS_SCRAMBLE";
+  const teams = data.teams ?? [];
+  const isStableford = data.event.format === "STABLEFORD" || scramble;
+  const started = scramble ? teams.some((t) => t.thru > 0) : data.standings.some((s) => s.thru > 0);
 
   if (tv) return <TvBoard data={data} changed={changed} live={status === "live"} />;
 
@@ -57,9 +59,9 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <HeaderStat label="Players" value={String(data.stats.registered)} />
+            <HeaderStat label={scramble ? "Teams" : "Players"} value={scramble ? String(teams.length) : String(data.stats.registered)} />
             <HeaderStat label="Holes scored" value={`${data.stats.scoresEntered}`} />
-            <HeaderStat label="Format" value={isStableford ? "Stableford" : "Net stroke"} />
+            <HeaderStat label="Format" value={scramble ? "Texas scramble" : isStableford ? "Stableford" : "Net stroke"} />
             <HeaderStat label="Allowance" value={`${data.event.handicapAllowance}%`} />
           </div>
         </div>
@@ -76,6 +78,54 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
       </header>
 
       <div className="card overflow-hidden">
+        {scramble ? (
+          <table className="table-base">
+            <thead>
+              <tr>
+                <th className="w-12">Pos</th>
+                <th>Team</th>
+                <th className="hidden sm:table-cell">Players</th>
+                <th className="text-center">Thru</th>
+                <th className="text-center">Pts</th>
+                <th className="hidden text-center sm:table-cell">Gross</th>
+                <th className="text-center">To par</th>
+              </tr>
+            </thead>
+            <tbody>
+              {teams.map((team) => {
+                const isMoved = changed.some((id) => team.members.some((m) => m.playerId === id));
+                return (
+                  <tr key={team.groupId} className={`${isMoved ? "score-flash" : ""} ${team.position <= 3 ? "bg-sand-50/60" : ""}`}>
+                    <td className="font-mono text-[13px] font-bold text-ink/70">
+                      {team.thru === 0 ? "–" : team.tied ? `T${team.position}` : team.position}
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{team.groupName}</span>
+                        {team.position === 1 && team.thru > 0 && <Trophy className="h-3.5 w-3.5 text-sand-500" />}
+                        {isMoved && <span className="pill bg-emerald-50 text-emerald-700 ring-emerald-200">updated</span>}
+                      </div>
+                      <div className="text-[11.5px] text-ink/45">
+                        Team handicap {team.teamHandicap}
+                        {team.teeTime ? ` · tee ${team.teeTime}` : ""}
+                        {team.drivesShort.length > 0 && team.thru > 0
+                          ? ` · drives owed: ${team.drivesShort.join(", ")}`
+                          : ""}
+                      </div>
+                    </td>
+                    <td className="hidden text-[13px] text-ink/55 sm:table-cell">
+                      {team.members.map((m) => m.name).join(" · ")}
+                    </td>
+                    <td className="text-center font-mono text-[13px]">{team.thru === 0 ? "–" : team.thru === data.holes.length ? "F" : team.thru}</td>
+                    <td className="text-center font-mono text-[15px] font-extrabold">{team.thru === 0 ? "–" : team.points}</td>
+                    <td className="hidden text-center font-mono text-[13px] text-ink/60 sm:table-cell">{team.thru === 0 ? "–" : team.gross}</td>
+                    <td className="text-center font-mono text-[13px] text-ink/60">{team.thru === 0 ? "–" : formatToPar(team.toPar)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
         <table className="table-base">
           <thead>
             <tr>
@@ -116,6 +166,7 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
             })}
           </tbody>
         </table>
+        )}
         {!started && (
           <div className="border-t border-ink/[0.06] px-5 py-8 text-center text-[13.5px] text-ink/50">
             No scores yet. Cards appear here the moment the first group tees off.
@@ -138,11 +189,11 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
               </tr>
             </thead>
             <tbody>
-              {data.standings.map((s) => {
-                const byHole = new Map(s.holeResults.map((r) => [r.holeNumber, r]));
+              {(scramble ? teams.map((t) => ({ key: t.groupId, name: t.groupName, results: t.holeResults, total: t.points })) : data.standings.map((s) => ({ key: s.playerId, name: s.playerName, results: s.holeResults, total: s.points }))).map((s) => {
+                const byHole = new Map(s.results.map((r) => [r.holeNumber, r]));
                 return (
-                  <tr key={s.playerId} className="bg-ink/[0.02]">
-                    <td className="whitespace-nowrap rounded-l-lg px-2 py-1 font-semibold">{s.playerName}</td>
+                  <tr key={s.key} className="bg-ink/[0.02]">
+                    <td className="whitespace-nowrap rounded-l-lg px-2 py-1 font-semibold">{s.name}</td>
                     {data.holes.map((h) => {
                       const r = byHole.get(h.holeNumber);
                       const tone = !r
@@ -162,7 +213,7 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
                         </td>
                       );
                     })}
-                    <td className="rounded-r-lg px-2 text-right font-mono font-bold">{isStableford ? s.points : formatToPar(s.netToPar)}</td>
+                    <td className="rounded-r-lg px-2 text-right font-mono font-bold">{isStableford ? s.total : "–"}</td>
                   </tr>
                 );
               })}
@@ -199,14 +250,17 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
           <h2 className="text-[15px] font-bold">Card of the day</h2>
           <p className="text-[12.5px] text-ink/50">Best completed or in-progress rounds.</p>
           <ol className="mt-3 space-y-2">
-            {data.standings.filter((s) => s.thru > 0).slice(0, 5).map((s) => (
-              <li key={s.playerId} className="flex items-center gap-3 rounded-xl bg-ink/[0.03] px-3 py-2">
+            {(scramble
+              ? teams.map((t) => ({ id: t.groupId, name: t.groupName, position: t.position, thru: t.thru, toPar: t.toPar, points: t.points }))
+              : data.standings.map((s) => ({ id: s.playerId, name: s.playerName, position: s.position, thru: s.thru, toPar: s.toPar, points: s.points }))
+            ).filter((s) => s.thru > 0).slice(0, 5).map((s) => (
+              <li key={s.id} className="flex items-center gap-3 rounded-xl bg-ink/[0.03] px-3 py-2">
                 <span className="w-6 text-center font-mono text-[12px] font-bold text-ink/50">{ordinal(s.position)}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] font-semibold">{s.playerName}</div>
+                  <div className="truncate text-[13.5px] font-semibold">{s.name}</div>
                   <div className="text-[11.5px] text-ink/45">thru {s.thru} · {formatToPar(s.toPar)} gross</div>
                 </div>
-                <span className="font-mono text-[15px] font-extrabold">{isStableford ? `${s.points} pts` : `${formatToPar(s.netToPar)} net`}</span>
+                <span className="font-mono text-[15px] font-extrabold">{`${s.points} pts`}</span>
               </li>
             ))}
             {!started && <li className="text-[13px] text-ink/45">Nothing scored yet.</li>}
@@ -239,7 +293,29 @@ function HeaderStat({ label, value }: { label: string; value: string }) {
 function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: string[]; live: boolean }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [clock, setClock] = useState("");
-  const isStableford = data.event.format === "STABLEFORD";
+  const scramble = data.event.format === "TEXAS_SCRAMBLE";
+  const isStableford = data.event.format === "STABLEFORD" || scramble;
+  const rows = scramble
+    ? (data.teams ?? []).map((t) => ({
+        key: t.groupId,
+        name: t.groupName,
+        sub: `Team handicap ${t.teamHandicap}`,
+        thru: t.thru,
+        points: t.points,
+        netToPar: t.netToPar,
+        position: t.position,
+        tied: t.tied,
+      }))
+    : data.standings.map((s) => ({
+        key: s.playerId,
+        name: s.playerName,
+        sub: `${s.groupName ?? ""} · PH ${s.playingHandicap}`,
+        thru: s.thru,
+        points: s.points,
+        netToPar: s.netToPar,
+        position: s.position,
+        tied: s.tied,
+      }));
 
   useEffect(() => {
     const tick = () => setClock(new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }));
@@ -278,7 +354,7 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
         <div className="text-right">
           <div className="font-mono text-4xl font-extrabold">{clock}</div>
           <div className="text-[15px] text-fairway-100/70">
-            {data.event.courseName ?? ""} · {isStableford ? "Stableford" : "Net stroke play"}
+            {data.event.courseName ?? ""} · {scramble ? "Texas scramble" : isStableford ? "Stableford" : "Net stroke play"}
           </div>
         </div>
       </header>
@@ -289,20 +365,20 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
             <thead className="sticky top-0 bg-fairway-950/95 text-[14px] uppercase tracking-wide text-white/60">
               <tr>
                 <th className="w-20 px-5 py-3">Pos</th>
-                <th className="py-3">Player</th>
+                <th className="py-3">{scramble ? "Team" : "Player"}</th>
                 <th className="w-24 py-3 text-center">Thru</th>
                 <th className="w-28 py-3 pr-5 text-right">{isStableford ? "Points" : "Net"}</th>
               </tr>
             </thead>
             <tbody>
-              {data.standings.map((s) => (
-                <tr key={s.playerId} className={`border-t border-white/[0.06] ${changed.includes(s.playerId) ? "score-flash" : ""}`}>
+              {rows.map((s) => (
+                <tr key={s.key} className={`border-t border-white/[0.06] ${changed.includes(s.key) ? "score-flash" : ""}`}>
                   <td className="px-5 py-3 font-mono text-2xl font-bold text-white/70">
                     {s.thru === 0 ? "–" : s.tied ? `T${s.position}` : s.position}
                   </td>
                   <td className="py-3">
-                    <div className="text-2xl font-bold">{s.playerName}</div>
-                    <div className="text-[14px] text-white/60">{s.groupName ?? ""} · PH {s.playingHandicap}</div>
+                    <div className="text-2xl font-bold">{s.name}</div>
+                    <div className="text-[14px] text-white/60">{s.sub}</div>
                   </td>
                   <td className="py-3 text-center font-mono text-2xl">{s.thru === 0 ? "–" : s.thru === data.holes.length ? "F" : s.thru}</td>
                   <td className="py-3 pr-5 text-right font-mono text-3xl font-extrabold">

@@ -89,7 +89,7 @@ export const events = sqliteTable("events", {
   startTime: text("start_time").notNull().default("08:00"), // HH:MM (local to venue)
   courseId: text("course_id"),
   courseName: text("course_name"), // snapshot in case a course is deleted
-  format: text("format").notNull().default("STABLEFORD"), // STABLEFORD | STROKE_PLAY
+  format: text("format").notNull().default("STABLEFORD"), // STABLEFORD | STROKE_PLAY | TEXAS_SCRAMBLE
   handicapAllowance: integer("handicap_allowance").notNull().default(95),
   status: text("status").notNull().default("DRAFT"), // DRAFT | OPEN | IN_PROGRESS | COMPLETED | CANCELLED
   maxPlayers: integer("max_players").notNull().default(72),
@@ -254,10 +254,126 @@ export const eventPayments = sqliteTable("event_payments", {
   method: text("method").notNull().default("MANUAL"), // MANUAL | STRIPE
   amountPence: integer("amount_pence").notNull().default(0),
   stripeSessionId: text("stripe_session_id"),
+  /** PaymentIntent id - what a refund is issued against. */
+  stripePaymentIntent: text("stripe_payment_intent"),
+  /** Running total of money given back, in pence. */
+  refundedPence: integer("refunded_pence").notNull().default(0),
+  refundedAt: text("refunded_at"),
   paidAt: text("paid_at"),
   updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
 }, (t) => ({
   paymentUnique: uniqueIndex("event_payment_unique").on(t.eventId, t.playerId),
+}));
+
+
+/** Texas scramble: one card per tee group (the team), not per player. */
+export const scrambleScores = sqliteTable("scramble_scores", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  groupId: text("group_id").notNull(),
+  holeNumber: integer("hole_number").notNull(),
+  strokes: integer("strokes").notNull(),
+  /** Whose tee shot the team used - drives each player must contribute. */
+  drivePlayerId: text("drive_player_id"),
+  recordedBy: text("recorded_by"),
+  updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  scoreUnique: uniqueIndex("scramble_score_unique").on(t.eventId, t.groupId, t.holeNumber),
+  groupIdx: index("scramble_score_group_idx").on(t.eventId, t.groupId),
+}));
+
+export const scrambleAudit = sqliteTable("scramble_audit", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  groupId: text("group_id").notNull(),
+  holeNumber: integer("hole_number").notNull(),
+  oldStrokes: integer("old_strokes"),
+  newStrokes: integer("new_strokes").notNull(),
+  changedBy: text("changed_by"),
+  changedAt: text("changed_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  auditIdx: index("scramble_audit_event_idx").on(t.eventId),
+}));
+
+/** The club that runs a set of golf days. */
+export const societies = sqliteTable("societies", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  homeClub: text("home_club"),
+  joinCode: text("join_code").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  slugUnique: uniqueIndex("societies_slug_unique").on(t.slug),
+  joinUnique: uniqueIndex("societies_join_unique").on(t.joinCode),
+}));
+
+export const societyMembers = sqliteTable("society_members", {
+  id: text("id").primaryKey(),
+  societyId: text("society_id").notNull(),
+  playerId: text("player_id").notNull(),
+  role: text("role").notNull().default("MEMBER"), // OWNER | SECRETARY | MEMBER
+  status: text("status").notNull().default("ACTIVE"), // ACTIVE | INVITED
+  joinedAt: text("joined_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  memberUnique: uniqueIndex("society_member_unique").on(t.societyId, t.playerId),
+  playerIdx: index("society_member_player_idx").on(t.playerId),
+}));
+
+export const societyEvents = sqliteTable("society_events", {
+  id: text("id").primaryKey(),
+  societyId: text("society_id").notNull(),
+  eventId: text("event_id").notNull(),
+}, (t) => ({
+  eventUnique: uniqueIndex("society_event_unique").on(t.eventId),
+  societyIdx: index("society_event_society_idx").on(t.societyId),
+}));
+
+/** A season / order of merit: points from the fixtures attached to it. */
+export const seasons = sqliteTable("seasons", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull(),
+  societyId: text("society_id"),
+  name: text("name").notNull(),
+  startsOn: text("starts_on").notNull(),
+  endsOn: text("ends_on").notNull(),
+  /** POSITION (order of merit points) | STABLEFORD (sum of Stableford points) */
+  scheme: text("scheme").notNull().default("POSITION"),
+  /** 0 = every fixture counts; otherwise the best N results count. */
+  bestOf: integer("best_of").notNull().default(0),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  slugUnique: uniqueIndex("seasons_slug_unique").on(t.slug),
+  societyIdx: index("seasons_society_idx").on(t.societyId),
+}));
+
+export const seasonEvents = sqliteTable("season_events", {
+  id: text("id").primaryKey(),
+  seasonId: text("season_id").notNull(),
+  eventId: text("event_id").notNull(),
+}, (t) => ({
+  eventUnique: uniqueIndex("season_event_unique").on(t.eventId),
+  seasonIdx: index("season_event_season_idx").on(t.seasonId),
+}));
+
+/** Every refund against an entry fee (a payment can be refunded in parts). */
+export const paymentRefunds = sqliteTable("payment_refunds", {
+  id: text("id").primaryKey(),
+  paymentId: text("payment_id").notNull(),
+  eventId: text("event_id").notNull(),
+  playerId: text("player_id").notNull(),
+  amountPence: integer("amount_pence").notNull(),
+  status: text("status").notNull().default("SUCCEEDED"), // SUCCEEDED | FAILED
+  stripeRefundId: text("stripe_refund_id"),
+  reason: text("reason"),
+  createdBy: text("created_by"),
+  createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  paymentIdx: index("payment_refund_payment_idx").on(t.paymentId),
+  eventIdx: index("payment_refund_event_idx").on(t.eventId),
 }));
 
 export type User = typeof users.$inferSelect;
@@ -269,3 +385,8 @@ export type EventHole = typeof eventHoles.$inferSelect;
 export type EventPlayer = typeof eventPlayers.$inferSelect;
 export type Group = typeof groups.$inferSelect;
 export type Score = typeof scores.$inferSelect;
+export type ScrambleScore = typeof scrambleScores.$inferSelect;
+export type Society = typeof societies.$inferSelect;
+export type SocietyMember = typeof societyMembers.$inferSelect;
+export type Season = typeof seasons.$inferSelect;
+export type PaymentRefund = typeof paymentRefunds.$inferSelect;
