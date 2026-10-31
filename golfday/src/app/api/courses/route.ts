@@ -1,9 +1,9 @@
 import { asc, like, or } from "drizzle-orm";
 import { db } from "@/db/client";
-import { courseHoles, courses } from "@/db/schema";
-import { requireUser } from "@/lib/http";
+import { courses } from "@/db/schema";
+import { requireOrganiser, requireUser } from "@/lib/http";
 import { json, parseJson, route } from "@/lib/http";
-import { newId } from "@/lib/ids";
+import { saveCourse } from "@/lib/courses";
 import { createCourseSchema, validate } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
@@ -20,37 +20,30 @@ export const GET = route(async (request: Request) => {
   return json({ courses: rows });
 });
 
+/**
+ * Add a course to the shared library by hand.
+ *
+ * Organisers only (see `requireOrganiser`). First-time organisers do not need
+ * this endpoint: creating a golf day can carry its course with it, and that
+ * makes the creator the event's owner.
+ */
 export const POST = route(async (request: Request) => {
-  const user = await requireUser();
+  const user = await requireOrganiser();
   const body = validate(createCourseSchema, await parseJson(request));
-  const courseId = newId();
-  const parTotal = body.holes.reduce((sum, h) => sum + h.par, 0);
-
-  await db.insert(courses).values({
-    id: courseId,
-    name: body.name.trim(),
-    club: body.club ?? null,
-    address: body.address ?? null,
-    city: body.city ?? null,
-    country: body.country ?? "England",
-    holesCount: body.holes.length,
-    parTotal,
-    tees: JSON.stringify(body.tees ?? [{ name: "White", colour: "white", slope: 113, rating: 72, par: parTotal }]),
-    source: body.source ?? "MANUAL",
-    externalId: body.externalId ?? null,
-    createdBy: user.id,
-  });
-
-  await db.insert(courseHoles).values(
-    body.holes.map((h) => ({
-      id: newId(),
-      courseId,
-      holeNumber: h.holeNumber,
-      par: h.par,
-      strokeIndex: h.strokeIndex,
-      yardages: "[]",
-    })),
+  const { courseId, created } = await saveCourse(
+    {
+      name: body.name,
+      club: body.club,
+      address: body.address,
+      city: body.city,
+      country: body.country,
+      tees: body.tees,
+      holes: body.holes,
+      externalId: body.externalId,
+      source: body.source ?? "MANUAL",
+    },
+    user.id,
   );
-
-  return json({ courseId }, { status: 201 });
+  // 200 when the card was already in the library, 201 when this call added it.
+  return json({ courseId, created }, { status: created ? 201 : 200 });
 });

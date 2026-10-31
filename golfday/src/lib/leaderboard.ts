@@ -1,7 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { eventPlayers, groups, players, scores } from "@/db/schema";
+import { getCurrentUser } from "./auth";
 import { getEventBundle, getRevision } from "./events";
+import { getEventAccess } from "./http";
 import { rankStandings, summariseRound, type Standing } from "./scoring";
 import { buildGames, getGameSettings, listSideEntries, type GamesPayload, type SideHole } from "./games";
 
@@ -65,6 +67,19 @@ export function toPublicEvent(event: {
     status: event.status,
     handicapAllowance: event.handicapAllowance,
   };
+}
+
+/**
+ * A public golf day's live board is readable by anyone - that is the point of the
+ * shareable link. A private one (`events.is_public = 0`) is readable only by the
+ * people who run it: its scorecard tokens and entry details should not leak just
+ * because somebody guessed a slug.
+ */
+export async function canViewEventBoard(event: { id: string; isPublic: boolean }): Promise<boolean> {
+  if (event.isPublic) return true;
+  const user = await getCurrentUser();
+  if (!user) return false;
+  return Boolean(await getEventAccess(event.id, user));
 }
 
 /**

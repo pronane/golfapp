@@ -77,6 +77,41 @@ export async function getEventAccess(eventId: string, user: SessionUser | null):
   }
 }
 
+/**
+ * Is this account allowed to maintain the shared course library?
+ *
+ * Site admins always are. So is anybody who runs or helps run a golf day - an
+ * OWNER/ADMIN/SCORER in `event_admins`. A signed-in player who has never created
+ * an event is not: the library is shared by every club on the instance, so it is
+ * not a free-for-all scratchpad for any account that signs up.
+ *
+ * First-time organisers still get a course, because creating a golf day can
+ * carry the course with it (see `createEvent`), and creating a golf day makes
+ * them its owner.
+ */
+export async function isOrganiser(user: SessionUser): Promise<boolean> {
+  if (user.isSiteAdmin) return true;
+  const [row] = await db
+    .select({ id: eventAdmins.id })
+    .from(eventAdmins)
+    .where(eq(eventAdmins.userId, user.id))
+    .limit(1);
+  return Boolean(row);
+}
+
+/** Same as `isOrganiser`, but throws a 403 the API can show to the user. */
+export async function requireOrganiser(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!(await isOrganiser(user))) {
+    throw new ApiError(
+      403,
+      "Only organisers can change the shared course library. Create a golf day to become an organiser.",
+      "not_organiser",
+    );
+  }
+  return user;
+}
+
 export async function parseJson<T>(request: Request): Promise<T> {
   try {
     return (await request.json()) as T;

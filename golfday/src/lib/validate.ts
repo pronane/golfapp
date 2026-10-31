@@ -45,6 +45,16 @@ export const createCourseSchema = z.object({
   source: z.enum(["MANUAL", "CATALOGUE", "GOLFCOURSEAPI", "IMPORT"]).optional(),
 });
 
+export const newCourseSchema = z.object({
+  name: z.string().min(2, "Give the course a name").max(120),
+  club: z.string().max(120).optional().nullable(),
+  address: z.string().max(200).optional().nullable(),
+  city: z.string().max(80).optional().nullable(),
+  country: z.string().max(80).optional().nullable(),
+  tees: z.array(teeSchema).max(6).optional(),
+  holes: z.array(holeSchema).min(9).max(36),
+});
+
 export const createEventSchema = z.object({
   name: z.string().min(2, "Give the golf day a name").max(120),
   description: z.string().max(600).optional(),
@@ -57,6 +67,10 @@ export const createEventSchema = z.object({
   status: z.enum(["DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).default("DRAFT"),
   isPublic: z.boolean().default(true),
   holes: z.array(holeSchema).length(18).optional(),
+  /** Course typed in with the event; saved to the library by the event's creator. */
+  newCourse: newCourseSchema.optional(),
+  /** Provider course to import and attach while creating the event. */
+  importExternalId: z.string().max(80).optional(),
 });
 
 export const updateEventSchema = z.object({
