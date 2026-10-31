@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { assertAuthSecret, isPlaceholderSecret } from "@/lib/session";
+import { assertAuthSecret, isPlaceholderSecret, signSession } from "@/lib/session";
 
 const REAL_SECRET = "Qm7v1sJ0mZ0Xk3lP9wR2tY5uI8oA1sD4fG7hJ0kL2nM5bV8cX1zQ4";
 
@@ -49,6 +49,15 @@ describe("session secret guard", () => {
       process.env.AUTH_SECRET = value;
       expect(() => assertAuthSecret(), value).toThrow();
     }
+  });
+
+  it("never signs a session with a placeholder key in production", async () => {
+    process.env.AUTH_SECRET = "change-me-to-a-long-random-string";
+    await expect(signSession({ uid: "u1", email: "a@b.c" })).rejects.toThrow(/AUTH_SECRET/);
+
+    process.env.AUTH_SECRET = REAL_SECRET;
+    const token = await signSession({ uid: "u1", email: "a@b.c" });
+    expect(token.split(".")).toHaveLength(3);
   });
 
   it("does not police local development", () => {

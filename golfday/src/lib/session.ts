@@ -56,19 +56,29 @@ export function assertAuthSecret(): void {
 }
 
 /**
- * Resolved lazily so `next build` doesn't need the variable. In production the
- * dev fallback is refused: it is committed to the repo, so anyone could forge a
- * session for any user id.
+ * Resolved lazily so `next build` doesn't need the variable.
+ *
+ * The length rule is a production rule only - a developer may use a short
+ * local secret - but a *published* placeholder is never used as a key, even
+ * locally: falling back to the known dev secret keeps one stable key per
+ * machine instead of silently signing with a value anybody can read.
  */
 function secretKey(): Uint8Array {
-  const value = process.env.AUTH_SECRET;
-  if (value && !isPlaceholderSecret(value) && value.trim().length >= 32) {
-    return new TextEncoder().encode(value);
-  }
+  const value = process.env.AUTH_SECRET?.trim();
+  const usable =
+    Boolean(value) &&
+    !isPlaceholderSecret(value) &&
+    (process.env.NODE_ENV !== "production" || (value as string).length >= 32);
+
+  if (usable) return new TextEncoder().encode(value);
+
   if (process.env.NODE_ENV === "production") {
-    assertAuthSecret(); // always throws here; keeps one message for both paths
+    // Throws with the single, actionable message used at boot too...
+    assertAuthSecret();
+    // ...and never falls through to the committed dev secret if that changes.
+    throw new Error("AUTH_SECRET is not configured");
   }
-  return new TextEncoder().encode(value || DEV_SECRET);
+  return new TextEncoder().encode(DEV_SECRET);
 }
 
 export type SessionPayload = { uid: string; email: string };
