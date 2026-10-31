@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  @apply bg-[#f6f7f2] text-ink antialiased;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 100% -10%, rgba(33, 154, 103, 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 0%, rgba(221, 166, 78, 0.09), transparent 55%);
+  background-attachment: fixed;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-white shadow-card ring-1 ring-ink/[0.06];
+  }
+  .card-pad { @apply p-5 sm:p-6; }
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink/60;
+  }
+  .input {
+    @apply w-full rounded-xl border-0 bg-white px-3.5 py-2.5 text-[15px] text-ink shadow-sm ring-1 ring-inset ring-ink/10
+      placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-fairway-500 disabled:opacity-60;
+  }
+  .select {
+    @apply input appearance-none pr-9;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 18px;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition
+      focus:outline-none focus-visible:ring-2 focus-visible:ring-fairway-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary { @apply btn bg-fairway-700 text-white shadow-sm hover:bg-fairway-800 active:bg-fairway-900; }
+  .btn-secondary { @apply btn bg-white text-ink ring-1 ring-inset ring-ink/10 hover:bg-ink/[0.03]; }
+  .btn-ghost { @apply btn text-ink/70 hover:bg-ink/[0.04]; }
+  .btn-sand { @apply btn bg-sand-400 text-ink shadow-sm hover:bg-sand-500; }
+  .btn-danger { @apply btn bg-rose-600 text-white hover:bg-rose-700; }
+  .btn-sm { @apply px-3 py-1.5 text-[13px]; }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold ring-1 ring-inset;
+  }
+  .table-base { @apply w-full border-separate border-spacing-0 text-sm; }
+  .table-base th {
+    @apply sticky top-0 z-10 bg-white px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink/45;
+  }
+  .table-base td { @apply border-t border-ink/[0.06] px-3 py-2.5; }
+  .link { @apply font-medium text-fairway-700 underline decoration-fairway-300 underline-offset-2 hover:text-fairway-900; }
+}
+
+.score-flash { animation: flash-in 1.4s ease-out; }
+
+@media print {
+  .no-print { display: none !important; }
+}
