@@ -52,8 +52,13 @@ npm test           # unit tests
 
 ## Demo
 
-Two narrated screen recordings live in [`demo/`](demo/README.md):
+Three narrated screen recordings live in [`demo/`](demo/README.md):
 
+* **`demo/golfday-start-to-finish.webm`** (4:10) - the whole process in one unedited sitting:
+  the organiser creates the golf day, types in a course card, fills the field, allocates tee
+  groups and opens scoring; a player signs up with their Golf England ID, joins with the code,
+  picks their own tee group, scores four holes and watches the public board update live. It also
+  generates the step-by-step stills in [`docs/screenshots/journey/`](docs/screenshots/journey).
 * **`demo/golfday-product-tour.webm`** (1:25) - landing page and live leaderboard, sign in,
   player dashboard, the organiser console (field, groups, card, admins), the course library,
   creating a golf day in the three-step wizard, and a player signing up with their Golf England ID.
@@ -62,7 +67,7 @@ Two narrated screen recordings live in [`demo/`](demo/README.md):
   one database, real clicks.
 
 They are WebM (VP9 + Opus narration); `demo/README.md` has a one-line ffmpeg command to convert to
-MP4 and the full script. Static screenshots of every screen are in
+MP4 and the full script for all three. Static screenshots of every screen are in
 [`docs/screenshots/`](docs/screenshots).
 
 ---
