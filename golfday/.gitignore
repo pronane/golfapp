@@ -10,3 +10,7 @@ data/*.db-shm
 *.tsbuildinfo
 next-env.d.ts
 /tmp
+
+# recorder scratch
+/stage-run.html
+.stage-run.html

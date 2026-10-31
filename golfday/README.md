@@ -15,8 +15,8 @@ golfday/
 ├── src/lib          # scoring, WHS handicaps, auth, catalogue, integrations
 ├── scripts          # db push + demo seed
 ├── tests            # vitest unit tests (scoring, handicaps, CSV import)
-├── demo             # demo videos + narration script
-└── docs             # hosting + integrations notes
+├── demo             # demo videos (narrated), recorder + mix scripts, cue sheets
+└── docs             # hosting + integrations notes, screenshots
 ```
 
 ---
@@ -47,6 +47,23 @@ npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
 npm test           # unit tests
 ```
+
+---
+
+## Demo
+
+Two narrated screen recordings live in [`demo/`](demo/README.md):
+
+* **`demo/golfday-product-tour.webm`** (1:25) - landing page and live leaderboard, sign in,
+  player dashboard, the organiser console (field, groups, card, admins), the course library,
+  creating a golf day in the three-step wizard, and a player signing up with their Golf England ID.
+* **`demo/golfday-live-scoring.webm`** (0:49) - the money shot: a four-ball entering scores on a
+  phone next to the clubhouse leaderboard updating live, including a score correction. Two panes,
+  one database, real clicks.
+
+They are WebM (VP9 + Opus narration); `demo/README.md` has a one-line ffmpeg command to convert to
+MP4 and the full script. Static screenshots of every screen are in
+[`docs/screenshots/`](docs/screenshots).
 
 ---
 
