@@ -10,7 +10,13 @@ export type LiveStatus = "connecting" | "live" | "offline";
  * `changed` holds player ids whose score moved on the most recent update, so the
  * UI can flash the row that just changed.
  */
-export function useLiveBoard(eventId: string, initial: LeaderboardPayload | null, lite = false) {
+export function useLiveBoard(
+  eventId: string,
+  initial: LeaderboardPayload | null,
+  lite = false,
+  /** group scoring token: lets a private event's scorecard follow its board */
+  token?: string,
+) {
   const [board, setBoard] = useState<LeaderboardPayload | null>(initial);
   const [status, setStatus] = useState<LiveStatus>(initial ? "live" : "connecting");
   const [changed, setChanged] = useState<string[]>([]);
@@ -25,7 +31,11 @@ export function useLiveBoard(eventId: string, initial: LeaderboardPayload | null
 
   useEffect(() => {
     if (!eventId) return;
-    const source = new EventSource(`/api/events/${eventId}/stream${lite ? "?lite=1" : ""}`);
+    const params = new URLSearchParams();
+    if (lite) params.set("lite", "1");
+    if (token) params.set("token", token);
+    const query = params.toString();
+    const source = new EventSource(`/api/events/${eventId}/stream${query ? `?${query}` : ""}`);
 
     source.addEventListener("open", () => setStatus("live"));
 
@@ -53,7 +63,7 @@ export function useLiveBoard(eventId: string, initial: LeaderboardPayload | null
 
     source.onerror = () => setStatus("offline");
     return () => source.close();
-  }, [eventId, lite]);
+  }, [eventId, lite, token]);
 
   return { board, status, changed, lastUpdate };
 }
