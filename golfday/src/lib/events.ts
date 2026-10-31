@@ -296,7 +296,7 @@ export type RegisterPlayerInput = {
 };
 
 /** Largest tee group a player can join on their own; admins can override. */
-const SELF_ENTRY_GROUP_LIMIT = 4;
+export const SELF_ENTRY_GROUP_LIMIT = 4;
 
 export async function registerPlayer(input: RegisterPlayerInput) {
   const event = await getEventById(input.eventId);
@@ -526,6 +526,68 @@ export async function deleteGroup(eventId: string, groupId: string) {
   await bumpRevision(eventId);
 }
 
+/**
+ * Put a player into one of this event's tee groups (or take them out with
+ * `groupId: null`).
+ *
+ * Requirement 4 says players mark their own group with no admin involved, so a
+ * player may call this for themselves - but they get the same four-ball cap as
+ * self-registration, and they must already be in the field. Event admins can
+ * move anybody, including into a group that is already full.
+ */
+export async function setPlayerGroup(input: {
+  eventId: string;
+  playerId: string;
+  groupId: string | null;
+  isAdmin: boolean;
+}) {
+  const event = await getEventById(input.eventId);
+  if (!event) throw new ApiError(404, "Event not found", "not_found");
+
+  const [registration] = await db
+    .select()
+    .from(eventPlayers)
+    .where(and(eq(eventPlayers.eventId, input.eventId), eq(eventPlayers.playerId, input.playerId)))
+    .limit(1);
+  if (!registration) throw new ApiError(404, "That player is not registered for this event", "not_found");
+
+  if (input.groupId) {
+    const [group] = await db
+      .select()
+      .from(groups)
+      .where(and(eq(groups.id, input.groupId), eq(groups.eventId, input.eventId)))
+      .limit(1);
+    if (!group) throw new ApiError(404, "Group not found", "not_found");
+
+    if (!input.isAdmin) {
+      if (registration.status !== "REGISTERED") {
+        throw new ApiError(409, "Enter the golf day before picking a tee group", "not_registered");
+      }
+      // Don't count the player who is already in this group.
+      const [{ count: inGroup }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(eventPlayers)
+        .where(
+          and(
+            eq(eventPlayers.groupId, input.groupId),
+            eq(eventPlayers.status, "REGISTERED"),
+            ne(eventPlayers.playerId, input.playerId),
+          ),
+        );
+      if (Number(inGroup) >= SELF_ENTRY_GROUP_LIMIT) {
+        throw new ApiError(409, `${group.name} is full - pick another group`, "group_full");
+      }
+    }
+  }
+
+  await db
+    .update(eventPlayers)
+    .set({ groupId: input.groupId })
+    .where(eq(eventPlayers.id, registration.id));
+  await bumpRevision(input.eventId);
+  return { ok: true, groupId: input.groupId };
+}
+
 export async function getGroupByToken(token: string) {
   const [group] = await db.select().from(groups).where(eq(groups.token, token)).limit(1);
   if (!group) return null;
@@ -538,7 +600,10 @@ export async function listPublicEvents(limit = 30) {
   return db
     .select({
       event: events,
-      playerCount: sql<number>`(select count(*) from event_players ep where ep.event_id = ${events.id} and ep.status = 'REGISTERED')`,
+      // NB: `events.id` must be written as literal SQL. Interpolating ${events.id}
+      // renders a bare "id", which SQLite resolves to the *string* 'id' inside the
+      // subquery (its double-quoted-identifier fallback), so every count came back 0.
+      playerCount: sql<number>`(select count(*) from event_players ep where ep.event_id = events.id and ep.status = 'REGISTERED')`,
     })
     .from(events)
     .where(and(eq(events.isPublic, true), ne(events.status, "DRAFT"), ne(events.status, "CANCELLED")))
