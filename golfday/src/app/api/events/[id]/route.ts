@@ -6,6 +6,8 @@ import { ApiError, getEventAccess, json, parseJson, requireEventAccess, requireU
 import { bumpRevision, getCourseWithHoles, getEventBundle, recalculateHandicaps } from "@/lib/events";
 import { newId } from "@/lib/ids";
 import { updateEventSchema, validate } from "@/lib/validate";
+import { deleteEventGames } from "@/lib/games";
+import { deleteEventPayments } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -86,5 +88,7 @@ export const DELETE = route(async (_request: Request, ctx: Ctx) => {
     throw new ApiError(403, "Only the event owner can delete the event", "forbidden");
   }
   await db.delete(events).where(eq(events.id, id));
+  await deleteEventGames(id);
+  await deleteEventPayments(id);
   return json({ ok: true });
 });

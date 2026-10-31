@@ -156,3 +156,54 @@ CREATE TABLE IF NOT EXISTS event_state (
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
+
+-- Game settings, 4BBB pairs and side games (added in a separate table each so
+-- existing databases only need these CREATE statements).
+CREATE TABLE IF NOT EXISTS event_settings (
+  event_id TEXT PRIMARY KEY,
+  skins TEXT NOT NULL DEFAULT 'OFF',
+  skins_carry INTEGER NOT NULL DEFAULT 1,
+  team_format TEXT NOT NULL DEFAULT 'NONE',
+  side_holes TEXT NOT NULL DEFAULT '[]',
+  sponsors TEXT NOT NULL DEFAULT '[]',
+  team_names TEXT NOT NULL DEFAULT '["Team A","Team B"]',
+  matches TEXT NOT NULL DEFAULT '[]',
+  entry_fee_pence INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+
+CREATE TABLE IF NOT EXISTS event_pairs (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  player_a TEXT NOT NULL,
+  player_b TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS event_pairs_event_idx ON event_pairs (event_id);
+
+CREATE TABLE IF NOT EXISTS side_game_entries (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  hole_number INTEGER NOT NULL,
+  player_id TEXT NOT NULL,
+  distance REAL NOT NULL,
+  recorded_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS side_game_entry_unique ON side_game_entries (event_id, kind, hole_number, player_id);
+
+-- Entry fees: one row per player who has paid (or started paying) for an event.
+CREATE TABLE IF NOT EXISTS event_payments (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  player_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  method TEXT NOT NULL DEFAULT 'MANUAL',
+  amount_pence INTEGER NOT NULL DEFAULT 0,
+  stripe_session_id TEXT,
+  paid_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS event_payment_unique ON event_payments (event_id, player_id);

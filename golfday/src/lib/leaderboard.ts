@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { eventPlayers, groups, players, scores } from "@/db/schema";
 import { getEventBundle, getRevision } from "./events";
 import { rankStandings, summariseRound, type Standing } from "./scoring";
+import { buildGames, getGameSettings, listSideEntries, type GamesPayload, type SideHole } from "./games";
 
 export type PublicEvent = {
   id: string;
@@ -33,6 +34,7 @@ export type LeaderboardPayload = {
   holes: { holeNumber: number; par: number; strokeIndex: number }[];
   standings: Standing[];
   groups: LeaderboardGroup[];
+  games: GamesPayload;
   stats: {
     registered: number;
     scoresEntered: number;
@@ -134,6 +136,7 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
   });
 
   const leader = standings.find((s) => s.thru > 0)?.playerName ?? null;
+  const games = await buildGames(eventId, standings, holeInfo);
 
   return {
     event: toPublicEvent(event),
@@ -143,6 +146,7 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
     holes: holeInfo,
     standings,
     groups: groupBoard,
+    games,
     stats: {
       registered: standings.length,
       scoresEntered: scoreRows.length,
@@ -166,6 +170,9 @@ export type GroupScoreboard = {
   };
   group: { id: string; name: string; teeTime: string | null; token: string };
   holes: { holeNumber: number; par: number; strokeIndex: number }[];
+  /** nearest-the-pin / longest-drive holes, and this group's measurements on them */
+  sideHoles: SideHole[];
+  sideEntries: { kind: string; holeNumber: number; playerId: string; distance: number }[];
   players: {
     id: string;
     name: string;
@@ -213,10 +220,17 @@ export async function getGroupScoreboard(token: string): Promise<GroupScoreboard
     };
   });
 
+  const [settings, entryRows] = await Promise.all([getGameSettings(group.eventId), listSideEntries(group.eventId)]);
+  const memberIds = new Set(members.map((m) => m.player.id));
+
   return {
     event: toPublicEvent(bundle.event),
     group: { id: group.id, name: group.name, teeTime: group.teeTime, token: group.token },
     holes: holeInfo,
+    sideHoles: settings.sideHoles,
+    sideEntries: entryRows
+      .filter((e) => memberIds.has(e.playerId))
+      .map((e) => ({ kind: e.kind, holeNumber: e.holeNumber, playerId: e.playerId, distance: e.distance })),
     players: playersPayload,
     revision: bundle.revision,
   };

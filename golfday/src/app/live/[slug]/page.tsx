@@ -15,11 +15,18 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function LivePage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function LivePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ tv?: string }>;
+}) {
   const { slug } = await params;
+  const { tv } = await searchParams;
   const event = await getEventBySlug(slug);
   if (!event) notFound();
   const board = await buildLeaderboard(event.id);
   if (!board) notFound();
-  return <LiveLeaderboard initial={board} />;
+  return <LiveLeaderboard initial={board} tv={tv === "1"} />;
 }

@@ -7,12 +7,22 @@ import { buildLeaderboard } from "@/lib/leaderboard";
 import { formatEventDate, formatToPar } from "@/lib/format";
 import { EventEntry } from "@/components/EventEntry";
 import { CopyButton } from "@/components/CopyButton";
+import { PayEntryButton } from "@/components/PayEntryButton";
+import { getGameSettings } from "@/lib/games";
+import { formatPence, getPayment, stripeEnabled } from "@/lib/payments";
 import { Arrow, LiveDot, Trophy } from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
 
-export default async function EventPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function EventPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ payment?: string }>;
+}) {
   const { slug } = await params;
+  const { payment: paymentResult } = await searchParams;
   const bundle = await getEventBundleBySlug(slug);
   if (!bundle) notFound();
   const { event, holes, registrations, groups } = bundle;
@@ -27,6 +37,9 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
   const front = holes.filter((h) => h.holeNumber <= 9);
   const back = holes.filter((h) => h.holeNumber > 9);
   const myGroup = mine?.registration.groupId ? groups.find((g) => g.id === mine.registration.groupId) : undefined;
+  const settings = await getGameSettings(event.id);
+  const myPayment = mine ? await getPayment(event.id, mine.player.id) : null;
+  const feePence = settings.entryFeePence;
   const top = board?.standings.filter((s) => s.thru > 0).slice(0, 5) ?? [];
 
   return (
@@ -83,6 +96,18 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
               <Link href={`/score/${myGroup.token}`} className="btn-primary btn-sm mt-2 w-full">
                 Enter my group&apos;s scores
               </Link>
+            )}
+            {paymentResult === "paid" && (
+              <p role="status" className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[12.5px] font-medium text-emerald-700">Payment received - you&apos;re all set.</p>
+            )}
+            {feePence > 0 && mine && (
+              myPayment?.status === "PAID" ? (
+                <p className="mt-2 text-[12.5px] font-medium text-emerald-700">Entry fee paid · {formatPence(myPayment.amountPence)}</p>
+              ) : stripeEnabled() ? (
+                <PayEntryButton eventId={event.id} label={`Pay entry · ${formatPence(feePence)}`} />
+              ) : (
+                <p className="mt-2 text-[12.5px] text-ink/70">Entry fee {formatPence(feePence)} - pay the organiser on the day.</p>
+              )
             )}
           </div>
         </div>

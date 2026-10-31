@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BLANK_CARD, CourseCardEditor, type CardHole } from "./CourseCardEditor";
 import { CopyButton } from "./CopyButton";
+import { GamesConsole } from "./GamesConsole";
+import { PaymentsPanel } from "./PaymentsPanel";
 import { STATUS_LABEL, STATUS_STYLE } from "@/lib/status";
 
 export type ConsoleEvent = {
@@ -62,6 +64,8 @@ const TABS = [
   { id: "field", label: "Field" },
   { id: "groups", label: "Groups" },
   { id: "card", label: "Card" },
+  { id: "games", label: "Games" },
+  { id: "payments", label: "Payments" },
   { id: "admins", label: "Admins" },
 ] as const;
 
@@ -583,6 +587,23 @@ export function EventConsole(props: Props) {
           </div>
         </section>
       )}
+
+      {tab === "games" && (
+        <GamesConsole
+          eventId={props.event.id}
+          holeCount={holes.length || 18}
+          players={props.registrations
+            .filter((r) => r.registration.status === "REGISTERED")
+            .map((r) => ({
+              id: r.player.id,
+              name: r.player.name,
+              playingHandicap: r.registration.playingHandicap,
+              groupId: r.registration.groupId,
+            }))}
+        />
+      )}
+
+      {tab === "payments" && <PaymentsPanel eventId={props.event.id} />}
 
       {tab === "admins" && (
         <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">

@@ -94,6 +94,18 @@ MP4 and the full script. Static screenshots of every screen are in
 * **Join code** so players can enter themselves, and **claim codes** so a guest player added by an organiser can later take ownership of their record.
 * **Revisions + SSE** instead of websockets: every write bumps `event_state.revision`, the stream pushes the board when it changes. This keeps it serverless-friendly.
 
+### Games, money and the clubhouse screen
+
+Set up in the organiser console's **Games** and **Payments** tabs.
+
+* **Skins** (net or gross, carry-overs optional). A hole only settles once everyone who has started has scored it.
+* **Nearest the pin / longest drive** on any hole. Measurements are entered on the group scorecard (feet / yards) and the leaders show on the board.
+* **Better-ball pairs (4BBB)** - pair each tee group automatically (1+2, 3+4); each hole counts the better Stableford score.
+* **Ryder Cup-style match play** - name the two teams, add singles or fourball matches (or auto-draw balanced singles). Strokes are taken off the low handicap in each match; the board shows each match ("2 UP thru 11", "3&2"), banked points and projected points.
+* **Entry fees** - set a fee; with `STRIPE_SECRET_KEY` players get a "Pay entry" button (Stripe Checkout, verified with Stripe on return, no webhook needed). Organisers can always mark cash or bank transfers as paid.
+* **Sponsors** along the live board, and a **clubhouse TV mode** at `/live/<slug>?tv=1`: full-screen, big type, the leaderboard scrolls itself, games alongside, sponsors along the bottom.
+* **Offline scoring** - with no signal, scores are kept on the phone ("3 saved on this phone · will sync") and sent automatically when the connection returns.
+
 ---
 
 ## Design notes

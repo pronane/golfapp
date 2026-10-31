@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GroupScoreboard } from "@/lib/leaderboard";
 import type { LeaderboardPayload } from "@/lib/leaderboard";
 import { formatEventDate, formatToPar, ordinal } from "@/lib/format";
 import { strokesReceived } from "@/lib/handicap";
 import { stablefordPoints } from "@/lib/scoring";
+import { formatDistance } from "@/lib/sidegames";
 import { LiveDot } from "./Icons";
+import { enqueue, flushQueue, readQueue } from "./offlineQueue";
 import { useLiveBoard } from "./useLiveBoard";
 
 type Props = {
@@ -28,6 +30,55 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
   const [saving, setSaving] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [pending, setPending] = useState(0);
+  const [sideValue, setSideValue] = useState("");
+  const [sideMessage, setSideMessage] = useState<string | null>(null);
+
+  const token = initial.group.token;
+
+  const refreshCard = useCallback(async () => {
+    const res = await fetch(`/api/groups/${token}`, { cache: "no-store" });
+    if (!res.ok) return;
+    const fresh = (await res.json()) as GroupScoreboard;
+    // Keep any scores still waiting to sync visible on top of the server's card.
+    const queued = readQueue(token);
+    setCard({
+      ...fresh,
+      players: fresh.players.map((p) => {
+        const mine = queued.filter((q) => q.playerId === p.id);
+        if (mine.length === 0) return p;
+        const scores = { ...p.scores };
+        for (const q of mine) scores[q.holeNumber] = q.strokes;
+        return { ...p, scores };
+      }),
+    });
+  }, [token]);
+
+  const sync = useCallback(async () => {
+    if (readQueue(token).length === 0) {
+      setPending(0);
+      return;
+    }
+    const result = await flushQueue(token);
+    setPending(result.left);
+    if (result.rejected.length) setError(`Not saved: ${result.rejected.join("; ")}`);
+    if (result.sent > 0 || result.rejected.length > 0) await refreshCard();
+  }, [token, refreshCard]);
+
+  // Pick up anything queued on an earlier visit, then retry whenever the
+  // phone comes back online, and every 20 seconds as a fallback.
+  useEffect(() => {
+    setPending(readQueue(token).length);
+    if (readQueue(token).length) void refreshCard();
+    void sync();
+    const onOnline = () => void sync();
+    window.addEventListener("online", onOnline);
+    const id = window.setInterval(() => void sync(), 20_000);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.clearInterval(id);
+    };
+  }, [token, sync, refreshCard]);
 
   const { board, status } = useLiveBoard(initial.event.id, initialBoard, true);
   const topFive = (board?.standings ?? initialBoard?.standings ?? []).filter((s) => s.thru > 0).slice(0, 5);
@@ -51,19 +102,34 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
         p.id === playerId ? { ...p, scores: { ...p.scores, [holeNumber]: strokes } } : p,
       ),
     }));
+    const payload = { eventId: card.event.id, playerId, holeNumber, strokes, token: card.group.token };
+    let res: Response;
     try {
-      const res = await fetch("/api/scores", {
+      res = await fetch("/api/scores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId: card.event.id, playerId, holeNumber, strokes, token: card.group.token }),
+        body: JSON.stringify(payload),
       });
+    } catch {
+      // No signal: keep the score on the phone and send it later.
+      enqueue(payload);
+      setPending(readQueue(token).length);
+      setSaving(null);
+      const nextHole = card.holes.find(
+        (h) => h.holeNumber > holeNumber && !(card.players.find((p) => p.id === playerId)?.scores[h.holeNumber]),
+      );
+      if (nextHole) setActiveHole(nextHole.holeNumber);
+      return;
+    }
+    try {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not save that score");
       setFlash(`${playerId}-${holeNumber}`);
       window.setTimeout(() => setFlash(null), 1200);
       // refresh totals for the group from the authoritative endpoint
-      const refreshed = await fetch(`/api/groups/${card.group.token}`, { cache: "no-store" });
-      if (refreshed.ok) setCard(await refreshed.json());
+      await refreshCard();
+      // we have signal again - send anything that queued up earlier
+      if (readQueue(token).length) void sync();
       // move to the next unscored hole for this player
       const nextHole = card.holes.find(
         (h) => h.holeNumber !== holeNumber && !(card.players.find((p) => p.id === playerId)?.scores[h.holeNumber]),
@@ -76,6 +142,45 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
       setError(err instanceof Error ? err.message : "Could not save");
     } finally {
       setSaving(null);
+    }
+  }
+
+  const sideHole = hole ? card.sideHoles.find((h) => h.holeNumber === hole.holeNumber) : undefined;
+  const sideEntry =
+    sideHole && activePlayer
+      ? card.sideEntries.find(
+          (e) => e.kind === sideHole.kind && e.holeNumber === sideHole.holeNumber && e.playerId === activePlayer.id,
+        )
+      : undefined;
+  const sideLeader = sideHole
+    ? [...card.sideEntries]
+        .filter((e) => e.kind === sideHole.kind && e.holeNumber === sideHole.holeNumber)
+        .sort((a, b) => (sideHole.kind === "NEAREST_PIN" ? a.distance - b.distance : b.distance - a.distance))[0]
+    : undefined;
+
+  async function saveSide(distance: number | null) {
+    if (!sideHole || !activePlayer) return;
+    setSideMessage(null);
+    try {
+      const res = await fetch("/api/side-games", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: card.event.id,
+          playerId: activePlayer.id,
+          kind: sideHole.kind,
+          holeNumber: sideHole.holeNumber,
+          token,
+          ...(distance === null ? {} : { distance }),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Couldn't save that");
+      setSideValue("");
+      setSideMessage(distance === null ? "Cleared" : "Saved");
+      await refreshCard();
+    } catch (err) {
+      setSideMessage(err instanceof Error ? err.message : "Couldn't save that - check your signal");
     }
   }
 
@@ -101,6 +206,11 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
             </div>
             <div className="flex items-center gap-2">
               <span className="pill bg-white/10 text-white/80 ring-white/15">{scored}/{totalHoles} holes in</span>
+              {pending > 0 && (
+                <span role="status" className="pill bg-amber-400/15 text-amber-100 ring-amber-400/30">
+                  {pending} saved on this phone · will sync
+                </span>
+              )}
               <Link href={`/live/${card.event.slug}`} className="btn bg-white/10 btn-sm text-white ring-1 ring-inset ring-white/20 hover:bg-white/15">
                 Leaderboard
               </Link>
@@ -222,6 +332,38 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
               )}
               {error && <div className="border-t border-rose-100 bg-rose-50 px-5 py-2.5 text-[12.5px] text-rose-700">{error}</div>}
               {flash && <div className="border-t border-emerald-100 bg-emerald-50 px-5 py-2.5 text-[12.5px] font-medium text-emerald-700">Score saved - leaderboard updated.</div>}
+            </section>
+          )}
+
+          {sideHole && activePlayer && (
+            <section className="card card-pad" aria-labelledby="side-entry-title">
+              <h2 id="side-entry-title" className="text-[14px] font-bold">
+                {sideHole.kind === "NEAREST_PIN" ? "Nearest the pin" : "Longest drive"} · hole {sideHole.holeNumber}
+              </h2>
+              <p className="text-[12.5px] text-ink/60">
+                {sideLeader
+                  ? `Leader so far in your group: ${card.players.find((p) => p.id === sideLeader.playerId)?.name ?? ""} ${formatDistance(sideHole.kind, sideLeader.distance)}`
+                  : "No one in your group has a measurement yet."}
+                {sideEntry ? ` · ${activePlayer.name.split(" ")[0]}: ${formatDistance(sideHole.kind, sideEntry.distance)}` : ""}
+              </p>
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <div className="w-36">
+                  <label className="label" htmlFor="side-distance">
+                    {activePlayer.name.split(" ")[0]} ({sideHole.kind === "NEAREST_PIN" ? "feet" : "yards"})
+                  </label>
+                  <input id="side-distance" inputMode="decimal" className="input" value={sideValue}
+                    placeholder={sideHole.kind === "NEAREST_PIN" ? "e.g. 6.5" : "e.g. 265"}
+                    onChange={(e) => setSideValue(e.target.value)} />
+                </div>
+                <button className="btn-primary btn-sm" disabled={!(Number(sideValue) > 0)}
+                  onClick={() => void saveSide(Number(sideValue))}>
+                  Save
+                </button>
+                {sideEntry && (
+                  <button className="btn-secondary btn-sm" onClick={() => void saveSide(null)}>Clear</button>
+                )}
+              </div>
+              {sideMessage && <p role="status" className="mt-2 text-[12.5px] text-ink/70">{sideMessage}</p>}
             </section>
           )}
 
