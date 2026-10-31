@@ -21,6 +21,7 @@ export default async function AdminHome() {
           <p className="mt-1 text-[14px] text-ink/55">Create an event, publish groups, hand out scorecards and watch it come in.</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/admin/seasons" className="btn-secondary btn-sm">Seasons</Link>
           <Link href="/admin/courses" className="btn-secondary btn-sm">Course library</Link>
           <Link href="/admin/events/new" className="btn-primary btn-sm">New golf day</Link>
         </div>

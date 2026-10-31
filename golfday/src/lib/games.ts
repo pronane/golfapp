@@ -243,6 +243,9 @@ export async function buildGames(
   eventId: string,
   standings: Standing[],
   holes: { holeNumber: number; strokeIndex: number }[],
+  /** Everybody in the field, so side games still work for a scramble where the
+   *  individual standings are empty. Defaults to the standings themselves. */
+  allPlayers: { playerId: string; playerName: string }[] = standings,
 ): Promise<GamesPayload> {
   const holeNumbers = holes.map((h) => h.holeNumber);
   const [settings, pairRows, entryRows] = await Promise.all([
@@ -256,7 +259,7 @@ export async function buildGames(
     thru: s.thru,
     holeResults: s.holeResults,
   }));
-  const names = new Map(standings.map((s) => [s.playerId, s.playerName]));
+  const names = new Map(allPlayers.map((p) => [p.playerId, p.playerName]));
 
   const matchCards = new Map<string, MatchCard>(
     standings.map((s) => [

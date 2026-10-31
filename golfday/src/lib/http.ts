@@ -99,13 +99,16 @@ export async function isOrganiser(user: SessionUser): Promise<boolean> {
   return Boolean(row);
 }
 
-/** Same as `isOrganiser`, but throws a 403 the API can show to the user. */
-export async function requireOrganiser(): Promise<SessionUser> {
+/**
+ * Same as `isOrganiser`, but throws a 403 the API can show to the user.
+ * `what` names the thing being protected so the message makes sense in context.
+ */
+export async function requireOrganiser(what = "change the shared course library"): Promise<SessionUser> {
   const user = await requireUser();
   if (!(await isOrganiser(user))) {
     throw new ApiError(
       403,
-      "Only organisers can change the shared course library. Create a golf day to become an organiser.",
+      `Only organisers can ${what}. Create a golf day to become an organiser.`,
       "not_organiser",
     );
   }

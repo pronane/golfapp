@@ -2,6 +2,24 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { client } from "./client";
 
+/**
+ * Columns added after a table shipped. `CREATE TABLE IF NOT EXISTS` cannot add
+ * them to a database that already exists, and SQLite has no
+ * `ADD COLUMN IF NOT EXISTS`, so each one is attempted and the "duplicate
+ * column" error is ignored. That keeps `db:push` idempotent on old databases
+ * (including Turso) without a migration runner.
+ */
+const ADDED_COLUMNS: string[] = [
+  "ALTER TABLE event_payments ADD COLUMN stripe_payment_intent TEXT",
+  "ALTER TABLE event_payments ADD COLUMN refunded_pence INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE event_payments ADD COLUMN refunded_at TEXT",
+];
+
+function isDuplicateColumn(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /duplicate column name/i.test(message);
+}
+
 /** Splits the DDL file into statements and runs them one by one (idempotent). */
 export async function pushSchema() {
   const sqlFile = path.join(process.cwd(), "src/db/schema.sql");
@@ -16,6 +34,14 @@ export async function pushSchema() {
 
   for (const statement of statements) {
     await client.execute(statement);
+  }
+
+  for (const statement of ADDED_COLUMNS) {
+    try {
+      await client.execute(statement);
+    } catch (err) {
+      if (!isDuplicateColumn(err)) throw err;
+    }
   }
   return statements.length;
 }

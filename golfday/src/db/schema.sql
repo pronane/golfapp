@@ -207,3 +207,107 @@ CREATE TABLE IF NOT EXISTS event_payments (
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS event_payment_unique ON event_payments (event_id, player_id);
+
+-- Texas scramble: one card per tee group (the team), not per player.
+CREATE TABLE IF NOT EXISTS scramble_scores (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  hole_number INTEGER NOT NULL,
+  strokes INTEGER NOT NULL,
+  drive_player_id TEXT,
+  recorded_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS scramble_score_unique ON scramble_scores (event_id, group_id, hole_number);
+CREATE INDEX IF NOT EXISTS scramble_score_group_idx ON scramble_scores (event_id, group_id);
+
+-- Team-card corrections are audited too - a scramble card is easy to mistype
+-- and disputes are settled hole by hole.
+CREATE TABLE IF NOT EXISTS scramble_audit (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  hole_number INTEGER NOT NULL,
+  old_strokes INTEGER,
+  new_strokes INTEGER NOT NULL,
+  changed_by TEXT,
+  changed_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE INDEX IF NOT EXISTS scramble_audit_event_idx ON scramble_audit (event_id);
+
+-- A society is the club that runs the golf days: its own fixture list, roster
+-- and seasons. Everything is optional - a one-off event needs no society.
+CREATE TABLE IF NOT EXISTS societies (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  home_club TEXT,
+  join_code TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS societies_slug_unique ON societies (slug);
+CREATE UNIQUE INDEX IF NOT EXISTS societies_join_unique ON societies (join_code);
+
+CREATE TABLE IF NOT EXISTS society_members (
+  id TEXT PRIMARY KEY,
+  society_id TEXT NOT NULL,
+  player_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'MEMBER',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  joined_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS society_member_unique ON society_members (society_id, player_id);
+CREATE INDEX IF NOT EXISTS society_member_player_idx ON society_members (player_id);
+
+-- One society per fixture (a golf day belongs to the club that runs it).
+CREATE TABLE IF NOT EXISTS society_events (
+  id TEXT PRIMARY KEY,
+  society_id TEXT NOT NULL,
+  event_id TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS society_event_unique ON society_events (event_id);
+CREATE INDEX IF NOT EXISTS society_event_society_idx ON society_events (society_id);
+
+-- A season / order of merit: points from the fixtures attached to it.
+CREATE TABLE IF NOT EXISTS seasons (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL,
+  society_id TEXT,
+  name TEXT NOT NULL,
+  starts_on TEXT NOT NULL,
+  ends_on TEXT NOT NULL,
+  scheme TEXT NOT NULL DEFAULT 'POSITION',
+  best_of INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seasons_slug_unique ON seasons (slug);
+CREATE INDEX IF NOT EXISTS seasons_society_idx ON seasons (society_id);
+
+CREATE TABLE IF NOT EXISTS season_events (
+  id TEXT PRIMARY KEY,
+  season_id TEXT NOT NULL,
+  event_id TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS season_event_unique ON season_events (event_id);
+CREATE INDEX IF NOT EXISTS season_event_season_idx ON season_events (season_id);
+
+-- Every refund (full or partial) against an entry fee, so the organiser has a
+-- ledger even when several part-refunds are made against one payment.
+CREATE TABLE IF NOT EXISTS payment_refunds (
+  id TEXT PRIMARY KEY,
+  payment_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  player_id TEXT NOT NULL,
+  amount_pence INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'SUCCEEDED',
+  stripe_refund_id TEXT,
+  reason TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE INDEX IF NOT EXISTS payment_refund_payment_idx ON payment_refunds (payment_id);
+CREATE INDEX IF NOT EXISTS payment_refund_event_idx ON payment_refunds (event_id);

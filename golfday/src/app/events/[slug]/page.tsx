@@ -40,7 +40,35 @@ export default async function EventPage({
   const settings = await getGameSettings(event.id);
   const myPayment = mine ? await getPayment(event.id, mine.player.id) : null;
   const feePence = settings.entryFeePence;
-  const top = board?.standings.filter((s) => s.thru > 0).slice(0, 5) ?? [];
+  const scramble = event.format === "TEXAS_SCRAMBLE";
+  // A scramble is scored by team, so the "live standing" list is groups there.
+  const top = scramble
+    ? (board?.teams ?? [])
+        .filter((t) => t.thru > 0)
+        .slice(0, 5)
+        .map((t) => ({
+          key: t.groupId,
+          name: t.groupName,
+          sub: `${t.members.map((m) => m.name).join(" · ")} · team handicap ${t.teamHandicap}`,
+          position: t.position,
+          tied: t.tied,
+          thru: t.thru,
+          value: String(t.points),
+          toPar: t.toPar,
+        }))
+    : (board?.standings ?? [])
+        .filter((s) => s.thru > 0)
+        .slice(0, 5)
+        .map((s) => ({
+          key: s.playerId,
+          name: s.playerName,
+          sub: `${s.groupName ?? "No group"} · PH ${s.playingHandicap}`,
+          position: s.position,
+          tied: s.tied,
+          thru: s.thru,
+          value: event.format === "STABLEFORD" ? String(s.points) : formatToPar(s.netToPar),
+          toPar: s.toPar,
+        }));
 
   return (
     <div className="space-y-5">
@@ -53,7 +81,9 @@ export default async function EventPage({
                 <span className={`pill ${STATUS_STYLE[event.status]}`}>
                   {event.status === "IN_PROGRESS" && <LiveDot />} {STATUS_LABEL[event.status]}
                 </span>
-                <span className="pill bg-white/10 text-white/80 ring-white/15">{event.format === "STABLEFORD" ? "Stableford" : "Net stroke play"}</span>
+                <span className="pill bg-white/10 text-white/80 ring-white/15">
+                  {event.format === "STABLEFORD" ? "Stableford" : event.format === "TEXAS_SCRAMBLE" ? "Texas scramble" : "Net stroke play"}
+                </span>
                 <span className="pill bg-white/10 text-white/80 ring-white/15">{event.handicapAllowance}% allowance</span>
               </div>
               <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">{event.name}</h1>
@@ -117,30 +147,30 @@ export default async function EventPage({
         <div className="space-y-4">
           <section className="card">
             <div className="flex items-center justify-between border-b border-ink/[0.06] px-5 py-3.5">
-              <h2 className="text-[15px] font-bold">Live standing</h2>
+              <h2 className="text-[15px] font-bold">{scramble ? "Live team standing" : "Live standing"}</h2>
               <Link href={`/live/${event.slug}`} className="text-[12.5px] font-semibold text-fairway-700 hover:text-fairway-900">Full leaderboard →</Link>
             </div>
             <table className="table-base">
               <thead>
                 <tr>
-                  <th className="w-10">Pos</th><th>Player</th><th className="text-center">Thru</th>
-                  <th className="text-center">{event.format === "STABLEFORD" ? "Pts" : "Net"}</th>
+                  <th className="w-10">Pos</th><th>{scramble ? "Team" : "Player"}</th><th className="text-center">Thru</th>
+                  <th className="text-center">{scramble || event.format === "STABLEFORD" ? "Pts" : "Net"}</th>
                   <th className="text-center">To par</th>
                 </tr>
               </thead>
               <tbody>
                 {top.map((s) => (
-                  <tr key={s.playerId}>
+                  <tr key={s.key}>
                     <td className="font-mono text-[13px] font-bold text-ink/60">{s.tied ? `T${s.position}` : s.position}</td>
                     <td>
                       <div className="flex items-center gap-2 font-semibold">
-                        {s.playerName}
+                        {s.name}
                         {s.position === 1 && <Trophy className="h-3.5 w-3.5 text-sand-500" />}
                       </div>
-                      <div className="text-[11.5px] text-ink/45">{s.groupName ?? "No group"} · PH {s.playingHandicap}</div>
+                      <div className="text-[11.5px] text-ink/45">{s.sub}</div>
                     </td>
                     <td className="text-center font-mono text-[13px]">{s.thru}</td>
-                    <td className="text-center font-mono text-[15px] font-extrabold">{event.format === "STABLEFORD" ? s.points : formatToPar(s.netToPar)}</td>
+                    <td className="text-center font-mono text-[15px] font-extrabold">{s.value}</td>
                     <td className="text-center font-mono text-[13px] text-ink/60">{formatToPar(s.toPar)}</td>
                   </tr>
                 ))}
