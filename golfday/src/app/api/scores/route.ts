@@ -100,15 +100,23 @@ export const POST = route(async (request: Request) => {
       })
       .where(eq(scores.id, existing.id));
   } else {
-    await db.insert(scores).values({
-      id: newId(),
-      eventId: body.eventId,
-      playerId: body.playerId,
-      holeNumber: body.holeNumber,
-      strokes: body.strokes,
-      points,
-      recordedBy: user?.id ?? via,
-    });
+    // Two phones in the same group often enter the same hole at once. Without
+    // the upsert the second insert hits score_unique and returns a 500.
+    await db
+      .insert(scores)
+      .values({
+        id: newId(),
+        eventId: body.eventId,
+        playerId: body.playerId,
+        holeNumber: body.holeNumber,
+        strokes: body.strokes,
+        points,
+        recordedBy: user?.id ?? via,
+      })
+      .onConflictDoUpdate({
+        target: [scores.eventId, scores.playerId, scores.holeNumber],
+        set: { strokes: body.strokes, points, updatedAt: new Date().toISOString(), recordedBy: user?.id ?? via },
+      });
   }
 
   const revision = await bumpRevision(body.eventId);

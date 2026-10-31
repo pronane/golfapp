@@ -15,7 +15,7 @@ export async function GET(_request: Request, ctx: Ctx) {
   const header = [
     "Position", "Player", "Group", "Handicap", "Playing HCP", "Tee",
     ...holeNumbers.flatMap((n): (string | number)[] => [`H${n}`, `H${n} pts`]),
-    "Thru", "Gross", "Net", "Points", "To par",
+    "Thru", "Gross", "Net", "Net to par", "Points", "To par",
   ];
   const lines = [header.join(",")];
   for (const s of board.standings) {
@@ -26,9 +26,9 @@ export async function GET(_request: Request, ctx: Ctx) {
         const r = byHole.get(n);
         return r ? [r.strokes, r.points] : ["", ""];
       }),
-      s.thru, s.totalStrokes, s.totalNet, s.points, s.toPar,
+      s.thru, s.totalStrokes, s.totalNet, s.netToPar, s.points, s.toPar,
     ];
-    lines.push(cells.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","));
+    lines.push(cells.map((c) => `"${csvSafe(c).replace(/"/g, '""')}"`).join(","));
   }
   const filename = `${board.event.slug}-leaderboard.csv`;
   return new Response(lines.join("\n"), {
@@ -37,4 +37,14 @@ export async function GET(_request: Request, ctx: Ctx) {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
+}
+
+/**
+ * Player and group names are user-supplied. A name like `=HYPERLINK(...)` would
+ * run as a formula when the organiser opens the CSV in Excel/Sheets, so text
+ * cells that start with a formula character are prefixed with an apostrophe.
+ */
+function csvSafe(value: string | number): string {
+  if (typeof value === "number") return String(value);
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }

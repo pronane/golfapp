@@ -18,6 +18,8 @@ export type RoundTotals = {
   holesPlayed: number;
   totalStrokes: number;
   totalNet: number;
+  /** Net score relative to par for the holes played - the live stroke-play number. */
+  netToPar: number;
   points: number;
   toPar: number;
   frontNine: number;
@@ -50,6 +52,7 @@ export function summariseRound(
   let totalNet = 0;
   let points = 0;
   let toPar = 0;
+  let netToPar = 0;
   let frontNine = 0;
   let backNine = 0;
 
@@ -73,6 +76,7 @@ export function summariseRound(
     totalNet += net;
     points += pts;
     toPar += strokes - hole.par;
+    netToPar += net - hole.par;
     if (hole.holeNumber <= 9) frontNine += strokes;
     else backNine += strokes;
   }
@@ -81,6 +85,7 @@ export function summariseRound(
     holesPlayed: results.length,
     totalStrokes,
     totalNet,
+    netToPar,
     points,
     toPar,
     frontNine,
@@ -100,6 +105,8 @@ export type Standing = {
   thru: number;
   totalStrokes: number;
   totalNet: number;
+  /** Net to par over the holes played (falls back to totalNet for legacy rows). */
+  netToPar: number;
   points: number;
   toPar: number;
   position: number;
@@ -107,40 +114,91 @@ export type Standing = {
   holeResults: HoleResult[];
 };
 
-/** Sort per format and assign competition positions (shared for ties). */
-export function rankStandings(
-  rows: Omit<Standing, "position" | "tied">[],
+type RankInput = Omit<Standing, "position" | "tied" | "netToPar"> & { netToPar?: number };
+
+function netToParOf(row: RankInput): number {
+  if (row.netToPar != null) return row.netToPar;
+  if (row.holeResults.length > 0) return row.holeResults.reduce((sum, h) => sum + h.net - h.par, 0);
+  return row.totalNet;
+}
+
+/**
+ * Standard (CONGU-style) card countback for completed rounds: compare the last
+ * 9, 6, 3 and 1 holes. Stableford compares points (higher wins); net stroke
+ * play compares gross minus 1/2, 1/3, 1/6 and 1/18 of the playing handicap
+ * (lower wins). Returned as a list of numbers where *lower is better*.
+ */
+export function countback(
+  row: Pick<Standing, "holeResults" | "playingHandicap">,
   format: "STABLEFORD" | "STROKE_PLAY",
-): Standing[] {
-  const sorted = [...rows].sort((a, b) => {
-    if (format === "STROKE_PLAY") {
-      if (a.thru === 0 && b.thru > 0) return 1;
-      if (b.thru === 0 && a.thru > 0) return -1;
-      if (a.totalNet !== b.totalNet) return a.totalNet - b.totalNet;
-      if (a.totalStrokes !== b.totalStrokes) return a.totalStrokes - b.totalStrokes;
-      return a.playerName.localeCompare(b.playerName);
+  holesInCard: number,
+): number[] {
+  const byHole = new Map(row.holeResults.map((h) => [h.holeNumber, h]));
+  const segments = holesInCard >= 18 ? [9, 6, 3, 1] : [Math.ceil(holesInCard / 2), 3, 1];
+  return segments.map((n) => {
+    let points = 0;
+    let gross = 0;
+    for (let hole = holesInCard - n + 1; hole <= holesInCard; hole += 1) {
+      const result = byHole.get(hole);
+      points += result?.points ?? 0;
+      gross += result?.strokes ?? 0;
     }
-    if (a.points !== b.points) return b.points - a.points;
+    return format === "STABLEFORD" ? -points : gross - (row.playingHandicap * n) / holesInCard;
+  });
+}
+
+/**
+ * Sort per format and assign competition positions.
+ *
+ * Live rounds share positions on equal scores. Once both players have
+ * completed the card, ties are split on countback so the organiser has a
+ * winner without doing it by hand.
+ *
+ * Stroke play ranks by **net to par over the holes played**, not raw net
+ * strokes - otherwise a player through 3 holes (net 12) "led" a player who had
+ * finished on net 70.
+ */
+export function rankStandings(
+  rows: RankInput[],
+  format: "STABLEFORD" | "STROKE_PLAY",
+  holesInCard = 18,
+): Standing[] {
+  const enriched = rows.map((row) => ({ ...row, netToPar: netToParOf(row) }));
+  const complete = (r: { thru: number }) => r.thru > 0 && r.thru >= holesInCard;
+  const primary = (r: (typeof enriched)[number]) =>
+    format === "STROKE_PLAY" ? r.netToPar : -r.points;
+
+  const compareCountback = (a: (typeof enriched)[number], b: (typeof enriched)[number]) => {
+    if (!complete(a) || !complete(b)) return 0;
+    const ca = countback(a, format, holesInCard);
+    const cb = countback(b, format, holesInCard);
+    for (let i = 0; i < ca.length; i += 1) {
+      if (ca[i] !== cb[i]) return ca[i] - cb[i];
+    }
+    return 0;
+  };
+
+  const sorted = [...enriched].sort((a, b) => {
+    // Players with no score yet always sit at the bottom.
     if (a.thru === 0 && b.thru > 0) return 1;
     if (b.thru === 0 && a.thru > 0) return -1;
-    if (a.totalStrokes !== b.totalStrokes) return a.totalStrokes - b.totalStrokes;
+    if (primary(a) !== primary(b)) return primary(a) - primary(b);
+    const cb = compareCountback(a, b);
+    if (cb !== 0) return cb;
     return a.playerName.localeCompare(b.playerName);
   });
 
   const out: Standing[] = [];
-  let lastKey = "";
-  let lastPosition = 0;
   sorted.forEach((row, index) => {
-    const key =
-      format === "STROKE_PLAY"
-        ? `${row.totalNet}:${row.thru === 0 ? "x" : "y"}`
-        : `${row.points}:${row.thru === 0 ? "x" : "y"}`;
-    const position = key === lastKey ? lastPosition : index + 1;
-    lastKey = key;
-    lastPosition = position;
+    const prev = index > 0 ? sorted[index - 1] : null;
+    const sameAsPrev =
+      prev !== null &&
+      (prev.thru === 0) === (row.thru === 0) &&
+      primary(prev) === primary(row) &&
+      compareCountback(prev, row) === 0;
+    const position = sameAsPrev ? out[index - 1].position : index + 1;
     out.push({ ...row, position, tied: false });
   });
-  // mark ties
   const counts = new Map<number, number>();
   out.forEach((r) => counts.set(r.position, (counts.get(r.position) ?? 0) + 1));
   return out.map((r) => ({ ...r, tied: (counts.get(r.position) ?? 0) > 1 }));

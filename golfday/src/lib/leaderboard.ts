@@ -20,7 +20,6 @@ export type LeaderboardGroup = {
   id: string;
   name: string;
   teeTime: string | null;
-  token: string;
   players: string[];
   points: number;
   holesPlayed: number;
@@ -107,13 +106,18 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
         thru: total.holesPlayed,
         totalStrokes: total.totalStrokes,
         totalNet: total.totalNet,
+        netToPar: total.netToPar,
         points: total.points,
         toPar: total.toPar,
         holeResults: total.results,
       };
     });
 
-  const standings = rankStandings(rows, event.format === "STROKE_PLAY" ? "STROKE_PLAY" : "STABLEFORD");
+  const standings = rankStandings(
+    rows,
+    event.format === "STROKE_PLAY" ? "STROKE_PLAY" : "STABLEFORD",
+    holeInfo.length || 18,
+  );
 
   const groupBoard: LeaderboardGroup[] = groupRows.map((g) => {
     const members = standings.filter((s) => s.groupId === g.id);
@@ -121,7 +125,8 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
       id: g.id,
       name: g.name,
       teeTime: g.teeTime,
-      token: g.token,
+      // NB: never put g.token here. This payload is public (live page, API and
+      // SSE stream) and the token is the password for the group's scorecard.
       players: members.map((m) => m.playerName),
       points: members.reduce((sum, m) => sum + m.points, 0),
       holesPlayed: members.reduce((sum, m) => sum + m.thru, 0),

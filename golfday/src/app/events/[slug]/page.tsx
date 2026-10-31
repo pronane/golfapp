@@ -115,7 +115,7 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
                       <div className="text-[11.5px] text-ink/45">{s.groupName ?? "No group"} · PH {s.playingHandicap}</div>
                     </td>
                     <td className="text-center font-mono text-[13px]">{s.thru}</td>
-                    <td className="text-center font-mono text-[15px] font-extrabold">{event.format === "STABLEFORD" ? s.points : s.totalNet}</td>
+                    <td className="text-center font-mono text-[15px] font-extrabold">{event.format === "STABLEFORD" ? s.points : formatToPar(s.netToPar)}</td>
                     <td className="text-center font-mono text-[13px] text-ink/60">{formatToPar(s.toPar)}</td>
                   </tr>
                 ))}

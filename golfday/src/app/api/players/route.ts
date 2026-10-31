@@ -18,7 +18,8 @@ export const GET = route(async (request: Request) => {
       handicapIndex: players.handicapIndex,
       homeClub: players.homeClub,
       golfEnglandId: players.golfEnglandId,
-      email: players.email,
+      // email intentionally omitted: any signed-in user can search this
+      // directory, so returning it let anyone harvest every golfer's address.
       hasAccount: sql<boolean>`${players.userId} is not null`,
     })
     .from(players)

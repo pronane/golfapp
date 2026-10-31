@@ -105,7 +105,7 @@ export function LiveLeaderboard({ initial }: { initial: LeaderboardPayload }) {
                   </td>
                   <td className="hidden text-[13px] text-ink/55 sm:table-cell">{s.groupName ?? "—"}</td>
                   <td className="text-center font-mono text-[13px]">{s.thru === 0 ? "–" : s.thru === data.holes.length ? "F" : s.thru}</td>
-                  <td className="text-center font-mono text-[15px] font-extrabold">{s.thru === 0 ? "–" : isStableford ? s.points : s.totalNet}</td>
+                  <td className="text-center font-mono text-[15px] font-extrabold">{s.thru === 0 ? "–" : isStableford ? s.points : formatToPar(s.netToPar)}</td>
                   <td className="hidden text-center font-mono text-[13px] text-ink/60 sm:table-cell">{s.thru === 0 ? "–" : s.totalStrokes}</td>
                   <td className="text-center font-mono text-[13px] text-ink/60">{s.thru === 0 ? "–" : formatToPar(s.toPar)}</td>
                 </tr>
@@ -159,7 +159,7 @@ export function LiveLeaderboard({ initial }: { initial: LeaderboardPayload }) {
                         </td>
                       );
                     })}
-                    <td className="rounded-r-lg px-2 text-right font-mono font-bold">{isStableford ? s.points : s.totalNet}</td>
+                    <td className="rounded-r-lg px-2 text-right font-mono font-bold">{isStableford ? s.points : formatToPar(s.netToPar)}</td>
                   </tr>
                 );
               })}
@@ -199,7 +199,7 @@ export function LiveLeaderboard({ initial }: { initial: LeaderboardPayload }) {
                   <div className="truncate text-[13.5px] font-semibold">{s.playerName}</div>
                   <div className="text-[11.5px] text-ink/45">thru {s.thru} · {formatToPar(s.toPar)} gross</div>
                 </div>
-                <span className="font-mono text-[15px] font-extrabold">{isStableford ? `${s.points} pts` : s.totalNet}</span>
+                <span className="font-mono text-[15px] font-extrabold">{isStableford ? `${s.points} pts` : `${formatToPar(s.netToPar)} net`}</span>
               </li>
             ))}
             {!started && <li className="text-[13px] text-ink/45">Nothing scored yet.</li>}

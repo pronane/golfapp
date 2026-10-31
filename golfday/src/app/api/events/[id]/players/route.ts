@@ -29,6 +29,7 @@ export const POST = route(async (request: Request, ctx: Ctx) => {
     tee: body.tee,
     status: body.status,
     force: body.force && Boolean(access?.isAdmin),
+    selfEntry: !access?.isAdmin,
   });
   return json(result, { status: 201 });
 });

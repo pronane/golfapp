@@ -133,6 +133,64 @@ describe("ranking", () => {
   });
 });
 
+describe("live stroke play and countback", () => {
+  const holes = Array.from({ length: 18 }, (_, i) => ({ holeNumber: i + 1, par: 4, strokeIndex: i + 1 }));
+  const card = (name: string, strokes: number[], hcp = 0) => {
+    const total = summariseRound(
+      holes,
+      strokes.map((s, i) => ({ holeNumber: i + 1, strokes: s })),
+      hcp,
+    );
+    return {
+      playerId: name,
+      playerName: name,
+      groupId: null,
+      groupName: null,
+      tee: "White",
+      handicapIndex: hcp,
+      playingHandicap: hcp,
+      thru: total.holesPlayed,
+      totalStrokes: total.totalStrokes,
+      totalNet: total.totalNet,
+      netToPar: total.netToPar,
+      points: total.points,
+      toPar: total.toPar,
+      holeResults: total.results,
+    };
+  };
+
+  it("ranks a mid-round player by net to par, not raw net strokes", () => {
+    // Ada is 3 over through 3; Bob finished level par. Bob must lead.
+    const ada = card("Ada", [5, 5, 5]);
+    const bob = card("Bob", Array(18).fill(4));
+    const ranked = rankStandings([ada, bob], "STROKE_PLAY", 18);
+    expect(ranked.map((r) => r.playerName)).toEqual(["Bob", "Ada"]);
+    expect(ranked[0].netToPar).toBe(0);
+    expect(ranked[1].netToPar).toBe(3);
+  });
+
+  it("splits a finished stableford tie on back-nine countback", () => {
+    // Both 36 points; Cat scores better on the back nine.
+    const ada = card("Ada", [...Array(9).fill(3), ...Array(9).fill(5)]);
+    const cat = card("Cat", [...Array(9).fill(5), ...Array(9).fill(3)]);
+    expect(ada.points).toBe(cat.points);
+    const ranked = rankStandings([ada, cat], "STABLEFORD", 18);
+    expect(ranked.map((r) => r.playerName)).toEqual(["Cat", "Ada"]);
+    expect(ranked[0].position).toBe(1);
+    expect(ranked[1].position).toBe(2);
+    expect(ranked[0].tied).toBe(false);
+  });
+
+  it("keeps players tied while rounds are still in progress", () => {
+    const ada = card("Ada", [3, 5]);
+    const cat = card("Cat", [5, 3]);
+    const ranked = rankStandings([ada, cat], "STABLEFORD", 18);
+    expect(ranked[0].position).toBe(1);
+    expect(ranked[1].position).toBe(1);
+    expect(ranked[0].tied).toBe(true);
+  });
+});
+
 describe("csv import", () => {
   it("reads a Golf England style export", () => {
     const csv = `Name,Handicap Index,Home Club,Golf England ID,Email\n"Smith, Jane",12.4,Harrow GC,GE123,jane@example.com\nO'Neil Pat,5,Sunbury GC,GE456,`;
