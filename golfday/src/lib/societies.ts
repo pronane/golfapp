@@ -183,7 +183,14 @@ export async function getSocietyIntegration(societyId: string) {
   if (!society) return null;
   return {
     societyId: society.id,
-    source: (society.handicapSource ?? "DIRECTORY") as "MANUAL" | "DIRECTORY" | "WHS" | "CDH",
+    source: (society.handicapSource ?? "DIRECTORY") as
+      | "MANUAL"
+      | "DIRECTORY"
+      | "WHS"
+      | "CDH"
+      | "GHIN"
+      | "GOLF_CANADA"
+      | "GOLF_AUSTRALIA",
     country: society.handicapCountry ?? "eng",
     apiBase: society.handicapApiBase ?? "",
     username: society.handicapApiUsername ?? "",
@@ -202,7 +209,7 @@ export async function getSocietyIntegration(societyId: string) {
 export async function updateSocietyIntegration(
   societyId: string,
   input: {
-    source?: "MANUAL" | "DIRECTORY" | "WHS" | "CDH";
+    source?: "MANUAL" | "DIRECTORY" | "WHS" | "CDH" | "GHIN" | "GOLF_CANADA" | "GOLF_AUSTRALIA";
     country?: string;
     apiBase?: string;
     username?: string;

@@ -1,11 +1,13 @@
 /**
  * Handicap lookups, and where a society's numbers come from.
  *
- * Four sources, resolved per society (falling back to the deployment default):
+ * Five sources, resolved per society (falling back to the deployment default):
  *
  *   MANUAL     the organiser/player types the index in - always available
  *   DIRECTORY  the built-in demo directory (`mock`) - no credentials needed
  *   WHS        the national WHS platform (DotGolf ISV API, see ./whs.ts)
+ *   GHIN / GOLF_CANADA / GOLF_AUSTRALIA
+ *              overseas systems, same idea - see ./overseas.ts
  *   CDH        a society's own `GET {base}/golfers/{id}` proxy
  *
  * Nothing downstream cares which one answered: every path returns the same
@@ -18,6 +20,14 @@ import { societies } from "@/db/schema";
 import { ApiError } from "./http";
 import { openSecret } from "./secrets";
 import { DEFAULT_WHS_BASE, WHS_COUNTRIES, lookupCdhProxy, lookupWhsHandicap, type WhsConfig } from "./whs";
+import {
+  OVERSEAS_PRESETS,
+  OVERSEAS_PROVIDER_IDS,
+  isOverseasProvider,
+  lookupOverseasHandicap,
+  type OverseasConfig,
+  type OverseasProviderId,
+} from "./overseas";
 
 export type GolfEnglandPlayer = {
   golfEnglandId: string;
@@ -26,8 +36,10 @@ export type GolfEnglandPlayer = {
   homeClub: string;
   country: string;
   gender?: "M" | "F" | "X";
-  source: "GOLF_ENGLAND" | "MOCK" | "WHS" | "CDH" | "DIRECTORY";
+  source: "GOLF_ENGLAND" | "MOCK" | "WHS" | "CDH" | "DIRECTORY" | "OVERSEAS";
   updatedAt: string;
+  /** Which system answered, when it was an overseas one ("GHIN", "Golf Canada"...). */
+  provider?: string;
 };
 
 const MOCK_DIRECTORY: GolfEnglandPlayer[] = [
@@ -43,7 +55,7 @@ const MOCK_DIRECTORY: GolfEnglandPlayer[] = [
   { golfEnglandId: "GE100250", name: "Nina Petrova", handicapIndex: 11.4, homeClub: "The Belfry", country: "ENG", gender: "F", source: "MOCK", updatedAt: "2026-09-30" },
 ];
 
-export type HandicapSource = "MANUAL" | "DIRECTORY" | "WHS" | "CDH";
+export type HandicapSource = "MANUAL" | "DIRECTORY" | "WHS" | "CDH" | OverseasProviderId;
 
 export type ResolvedProvider = {
   source: HandicapSource;
@@ -58,6 +70,7 @@ export type ResolvedProvider = {
   country: string;
   whs?: WhsConfig;
   cdh?: { baseUrl: string; apiKey?: string | null; country: string };
+  overseas?: OverseasConfig;
 };
 
 export const HANDICAP_SOURCES: { value: HandicapSource; label: string; blurb: string }[] = [
@@ -77,6 +90,11 @@ export const HANDICAP_SOURCES: { value: HandicapSource; label: string; blurb: st
     blurb:
       "England Golf, Scottish Golf, Wales Golf or Golf Ireland via the DotGolf ISV API. Needs the club's credentials.",
   },
+  ...OVERSEAS_PROVIDER_IDS.map((id) => ({
+    value: id as HandicapSource,
+    label: OVERSEAS_PRESETS[id].label,
+    blurb: `Look up a ${OVERSEAS_PRESETS[id].idLabel} on ${OVERSEAS_PRESETS[id].federation}. Needs that organisation's credentials.`,
+  })),
   {
     value: "CDH",
     label: "Our own CDH endpoint",
@@ -102,6 +120,29 @@ function envProvider(): ResolvedProvider {
       societyName: null,
       country,
       whs: { baseUrl, country, username, secretKey, clientToken },
+    };
+  }
+  if (mode === "ghin" || mode === "golfcanada" || mode === "golfaustralia") {
+    const provider: OverseasProviderId =
+      mode === "ghin" ? "GHIN" : mode === "golfcanada" ? "GOLF_CANADA" : "GOLF_AUSTRALIA";
+    const preset = OVERSEAS_PRESETS[provider];
+    const envPrefix = `OVERSEAS_${provider}`;
+    const baseUrl = process.env[`${envPrefix}_API_BASE`] || preset.defaultBase;
+    const username = process.env[`${envPrefix}_USERNAME`] || null;
+    const secret = process.env[`${envPrefix}_SECRET`] || null;
+    const clientToken = process.env[`${envPrefix}_CLIENT_TOKEN`] || null;
+    const ready = Boolean(secret && (preset.auth === "key" || username));
+    return {
+      source: provider,
+      label: `Overseas database - ${preset.label}`,
+      ready,
+      detail: ready
+        ? "Configured from the deployment environment."
+        : `${envPrefix}_${preset.auth === "key" ? "SECRET" : "USERNAME / SECRET"} are not set.`,
+      societyId: null,
+      societyName: null,
+      country: preset.country,
+      overseas: { provider, baseUrl, username, secret, clientToken },
     };
   }
   if (mode === "cdh") {
@@ -167,6 +208,24 @@ export async function resolveHandicapProvider(options?: { societyId?: string | n
       whs: { baseUrl: society.handicapApiBase || DEFAULT_WHS_BASE, country, username, secretKey, clientToken },
     };
   }
+  if (isOverseasProvider(source)) {
+    const preset = OVERSEAS_PRESETS[source];
+    const apiBase = society.handicapApiBase || preset.defaultBase;
+    const username = society.handicapApiUsername ?? null;
+    const secret = openSecret(society.handicapApiSecret);
+    const ready = Boolean(secret && (preset.auth === "key" || username));
+    return {
+      ...base,
+      source,
+      label: `Overseas database - ${preset.label}`,
+      ready,
+      detail: ready
+        ? `Lookups go to ${preset.label} with this society's credentials.`
+        : `Add the ${preset.auth === "key" ? "API key" : "organisation username and password"} to turn lookups on.`,
+      country: preset.country,
+      overseas: { provider: source, baseUrl: apiBase, username, secret, clientToken: openSecret(society.handicapClientToken) },
+    };
+  }
   if (source === "CDH") {
     const baseUrl = society.handicapApiBase ?? "";
     return {
@@ -181,9 +240,11 @@ export async function resolveHandicapProvider(options?: { societyId?: string | n
   return { ...base, source: "DIRECTORY", label: "GolfDay directory", ready: true, detail: "Searching players already in GolfDay." };
 }
 
-export function golfEnglandMode(): "mock" | "whs" | "cdh" {
+export function golfEnglandMode(): "mock" | "whs" | "cdh" | "ghin" | "golfcanada" | "golfaustralia" {
   const mode = (process.env.GOLF_ENGLAND_MODE ?? "mock").toLowerCase();
-  return mode === "cdh" ? "cdh" : mode === "whs" ? "whs" : "mock";
+  return ["whs", "cdh", "ghin", "golfcanada", "golfaustralia"].includes(mode)
+    ? (mode as "whs" | "cdh" | "ghin" | "golfcanada" | "golfaustralia")
+    : "mock";
 }
 
 export function searchMockDirectory(query: string): GolfEnglandPlayer[] {
@@ -204,7 +265,8 @@ export function directoryGolfer(id: string): GolfEnglandPlayer | null {
 }
 
 /**
- * Looks a golfer up by their national ID (CDH / WHS member UID).
+ * Looks a golfer up by their handicap number (CDH / WHS member UID, or an
+ * overseas GHIN / Golf Canada / Golf Australia number).
  *
  * Returns null when the golfer is genuinely not found - or when the society has
  * lookups switched off, which is not an error, just nothing to offer. Throws
@@ -227,6 +289,23 @@ export async function lookupByGolfEnglandId(
     if (!provider.ready) throw new ApiError(409, provider.detail, "integration_not_configured");
     const found = await lookupWhsHandicap(provider.whs, trimmed);
     return found ? { ...found, source: "WHS" } : null;
+  }
+
+  if (isOverseasProvider(provider.source)) {
+    if (!provider.overseas) throw new ApiError(500, "Overseas provider is missing its configuration", "integration_not_configured");
+    if (!provider.ready) throw new ApiError(409, provider.detail, "integration_not_configured");
+    const found = await lookupOverseasHandicap(provider.overseas, id.trim());
+    if (!found) return null;
+    return {
+      golfEnglandId: found.handicapId,
+      name: found.name,
+      handicapIndex: found.handicapIndex,
+      homeClub: found.homeClub,
+      country: found.country,
+      source: "OVERSEAS",
+      updatedAt: found.updatedAt,
+      provider: found.federation,
+    };
   }
 
   if (!provider.cdh) throw new ApiError(500, "CDH provider is missing its configuration", "integration_not_configured");

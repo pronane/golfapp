@@ -54,7 +54,7 @@ export const PATCH = route(async (request: Request) => {
 
   if (body.refreshFromGolfEngland) {
     const id = body.golfEnglandId ?? player.golfEnglandId;
-    if (!id) throw new ApiError(400, "Add your Golf England ID first", "missing_id");
+    if (!id) throw new ApiError(400, "Add your handicap number first", "missing_id");
     // Use the club's own integration when the player belongs to one, so a
     // society with WHS credentials gets a real lookup and a club that types
     // handicaps in is told so, rather than silently using the demo directory.
@@ -67,7 +67,7 @@ export const PATCH = route(async (request: Request) => {
       throw new ApiError(409, provider.detail, "integration_not_configured");
     }
     const found = await lookupByGolfEnglandId(id, { societyId });
-    if (!found) throw new ApiError(404, "No golfer found for that Golf England ID", "not_found");
+    if (!found) throw new ApiError(404, "No golfer found with that handicap number", "not_found");
     updates.handicapIndex = found.handicapIndex;
     updates.homeClub = found.homeClub || player.homeClub;
     updates.golfEnglandId = found.golfEnglandId;

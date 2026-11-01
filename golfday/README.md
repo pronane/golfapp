@@ -22,6 +22,13 @@ golfday/
 
 ---
 
+**Just want to run a golf day?** Start with
+[`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) - a plain-English walkthrough for a
+secretary, from creating the society to the live board. The rest of this README is for
+whoever deploys and maintains the app.
+
+---
+
 ## Quick start
 
 ```bash
@@ -46,7 +53,7 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # 83 unit tests
+npm test           # 121 unit tests
 ```
 
 ---
@@ -128,9 +135,12 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 * **Per-society handicaps** - each club chooses where its indexes come from: typed in by
   hand, the GolfDay directory, the national WHS platform (England / Scotland / Wales /
-  Ireland, via the DotGolf ISV API) or the club's own CDH endpoint. Credentials are sealed
+  Ireland, via the DotGolf ISV API), an overseas system (GHIN, Golf Canada, Golf
+  Australia) or the club's own CDH endpoint. Credentials are sealed
   with AES-256-GCM, never returned to a browser, and a **Test lookup** button proves the
-  integration before a competition. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
+  integration before a competition. An overseas answer marks the index verified; a
+  lookup that cannot run reports 409/502/504 rather than pretending nobody was found.
+  See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 * **Seasons and the order of merit** (`/seasons/<slug>`) - attach fixtures to a season and
   the table builds itself from the live boards. Positions score 100-90-80-75… down the
   field (or sum Stableford points instead), ties share the position, and a **best-N**

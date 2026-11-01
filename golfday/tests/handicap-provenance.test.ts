@@ -44,10 +44,14 @@ describe("handicap provenance", () => {
   it("only a lookup verifies an index, and only for lookupable sources", () => {
     expect(provenance.verifiedFor("WHS", true)).toBe(true);
     expect(provenance.verifiedFor("WHS", false)).toBe(false);
-    // iGolf and overseas are official, but there is nothing to look up here.
+    // iGolf is official but there is nothing to look up from here.
     expect(provenance.verifiedFor("IGOLF", true)).toBe(false);
-    expect(provenance.verifiedFor("OVERSEAS", true)).toBe(false);
+    // Overseas is lookupable when the society holds GHIN / Golf Canada /
+    // Golf Australia credentials, so a real answer does verify it.
+    expect(provenance.verifiedFor("OVERSEAS", true)).toBe(true);
+    expect(provenance.verifiedFor("OVERSEAS", false)).toBe(false);
     expect(provenance.isLookupable("WHS")).toBe(true);
+    expect(provenance.isLookupable("OVERSEAS")).toBe(true);
     expect(provenance.isLookupable("IGOLF")).toBe(false);
   });
 
@@ -142,6 +146,8 @@ describe("players without a club or a national handicap", () => {
     expect(provenance.provenanceFromLookup("WHS")).toEqual({ source: "WHS", verified: true });
     expect(provenance.provenanceFromLookup("GOLF_ENGLAND")).toEqual({ source: "WHS", verified: true });
     expect(provenance.provenanceFromLookup("CDH")).toEqual({ source: "WHS", verified: true });
+    // A real overseas database did the lookup, so it is verified - not declared.
+    expect(provenance.provenanceFromLookup("OVERSEAS")).toEqual({ source: "OVERSEAS", verified: true });
     // Demo/directory data is not an authority, so it must never show a tick.
     expect(provenance.provenanceFromLookup("MOCK")).toEqual({ source: "MANUAL", verified: false });
     expect(provenance.provenanceFromLookup("DIRECTORY")).toEqual({ source: "MANUAL", verified: false });

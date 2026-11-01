@@ -127,7 +127,7 @@ export function ProfileCard({ player }: { player: Player | null }) {
               Save
             </button>
             {provenanceMeta(source).lookupable && (
-              <button className="btn-secondary btn-sm" disabled={busy} onClick={() => patch({ golfEnglandId: geId, refreshFromGolfEngland: true }, "Handicap refreshed from the national database")}>
+              <button className="btn-secondary btn-sm" disabled={busy} onClick={() => patch({ golfEnglandId: geId, refreshFromGolfEngland: true }, "Handicap refreshed from a real lookup")}>
                 Refresh from Golf England
               </button>
             )}
