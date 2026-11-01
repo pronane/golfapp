@@ -121,6 +121,11 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   roster** - so the same regulars do not have to be searched and added one at a time
   every month (anyone full or already playing that day is skipped and reported, not
   silently dropped).
+* **A handicap without a club** - a player can be WHS, iGolf, an overseas system (GHIN,
+  Golf Canada, Golf Australia), a society handicap, typed in by hand, or have **no handicap
+  yet** (scratch). Anyone can register and enter a golf day regardless; only a national
+  lookup sets the "verified" tick, and organisers see which index was confirmed. See
+  [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 * **Per-society handicaps** - each club chooses where its indexes come from: typed in by
   hand, the GolfDay directory, the national WHS platform (England / Scotland / Wales /
   Ireland, via the DotGolf ISV API) or the club's own CDH endpoint. Credentials are sealed

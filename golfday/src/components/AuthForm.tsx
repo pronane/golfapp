@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { FlagMark } from "./Icons";
+import { SELECTABLE_PROVENANCES, provenanceMeta } from "@/lib/handicapProvenance";
 
 type Mode = "login" | "register";
 
@@ -43,6 +44,8 @@ export function AuthForm({
     handicapIndex: "",
     homeClub: "",
     golfEnglandId: "",
+    handicapSource: "WHS",
+    handicapNote: "",
   });
   const [lookup, setLookup] = useState<string | null>(null);
 
@@ -65,6 +68,8 @@ export function AuthForm({
               handicapIndex: form.handicapIndex ? Number(form.handicapIndex) : undefined,
               homeClub: form.homeClub || undefined,
               golfEnglandId: form.golfEnglandId || undefined,
+              handicapSource: form.handicapSource,
+              handicapNote: form.handicapNote || undefined,
             };
       const res = await fetch(endpoint, {
         method: "POST",
@@ -152,24 +157,78 @@ export function AuthForm({
           {mode === "register" && (
             <>
               <div className="rounded-xl bg-fairway-50/70 p-3 ring-1 ring-inset ring-fairway-100">
-                <label className="label" htmlFor="ge">Golf England ID (optional)</label>
-                <div className="flex gap-2">
-                  <input id="ge" className="input" value={form.golfEnglandId} onChange={set("golfEnglandId")} placeholder="GE100241" />
-                  <button type="button" className="btn-secondary btn-sm shrink-0" onClick={golfEnglandLookup}>Look up</button>
-                </div>
-                <p className="mt-1.5 text-[11.5px] text-ink/50">
-                  {lookup ?? "We pull your WHS handicap index so event admins do not have to type it."}
+                <label className="label" htmlFor="handicap-source">Where does your handicap come from?</label>
+                <select
+                  id="handicap-source"
+                  className="select"
+                  value={form.handicapSource}
+                  onChange={(e) => setForm((prev) => ({ ...prev, handicapSource: e.target.value }))}
+                >
+                  {SELECTABLE_PROVENANCES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11.5px] text-ink/50">{provenanceMeta(form.handicapSource).blurb}</p>
+
+                {form.handicapSource !== "NONE" && (
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label" htmlFor="hcp">Handicap index</label>
+                      <input id="hcp" type="number" step="0.1" className="input" value={form.handicapIndex} onChange={set("handicapIndex")} placeholder="12.4" />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="club">Home club</label>
+                      <input id="club" className="input" value={form.homeClub} onChange={set("homeClub")} placeholder="Sunningdale (optional)" />
+                    </div>
+                  </div>
+                )}
+
+                {provenanceMeta(form.handicapSource).wantsId && (
+                  <div className="mt-3">
+                    <label className="label" htmlFor="ge">
+                      {form.handicapSource === "WHS" ? "Golf England / CDH ID" : "Handicap ID"}
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        id="ge"
+                        className="input"
+                        value={form.golfEnglandId}
+                        onChange={set("golfEnglandId")}
+                        placeholder={provenanceMeta(form.handicapSource).notePlaceholder ?? "optional"}
+                      />
+                      {form.handicapSource === "WHS" && (
+                        <button type="button" className="btn-secondary btn-sm shrink-0" onClick={golfEnglandLookup}>Look up</button>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-[11.5px] text-ink/50">
+                      {lookup ??
+                        (form.handicapSource === "WHS"
+                          ? "We pull your WHS handicap index so organisers do not have to type it."
+                          : "Optional - the number on your handicap record, so an organiser can check it.")}
+                    </p>
+                  </div>
+                )}
+
+                {form.handicapSource !== "WHS" && (
+                  <div className="mt-3">
+                    <label className="label" htmlFor="hcp-note">Anything else (optional)</label>
+                    <input
+                      id="hcp-note"
+                      className="input"
+                      value={form.handicapNote}
+                      onChange={set("handicapNote")}
+                      placeholder={provenanceMeta(form.handicapSource).notePlaceholder ?? "optional"}
+                    />
+                  </div>
+                )}
+
+                <p className="mt-2 text-[11px] leading-relaxed text-ink/45">
+                  No club or national handicap? Pick <strong>No handicap yet</strong> or <strong>Society or
+                  committee handicap</strong> - you can still enter any golf day, and an organiser can adjust your
+                  index when you have one.
                 </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="hcp">Handicap index</label>
-                  <input id="hcp" type="number" step="0.1" className="input" value={form.handicapIndex} onChange={set("handicapIndex")} placeholder="12.4" />
-                </div>
-                <div>
-                  <label className="label" htmlFor="club">Home club</label>
-                  <input id="club" className="input" value={form.homeClub} onChange={set("homeClub")} placeholder="Sunningdale" />
-                </div>
               </div>
             </>
           )}

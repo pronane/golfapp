@@ -40,7 +40,16 @@ export const players = sqliteTable("players", {
   country: text("country").notNull().default("ENG"),
   gender: text("gender"), // M | F | X - used for tee selection defaults
   claimCode: text("claim_code").notNull(),
-  handicapSource: text("handicap_source").notNull().default("MANUAL"), // MANUAL | GOLF_ENGLAND | CSV | API
+  /**
+   * How this golfer holds their handicap - see src/lib/handicapProvenance.ts.
+   * A club is optional: WHS | GOLF_ENGLAND | IGOLF | OVERSEAS | SOCIETY |
+   * MANUAL | CSV | API | NONE.
+   */
+  handicapSource: text("handicap_source").notNull().default("MANUAL"),
+  /** True only when a national-database lookup supplied the index. */
+  handicapVerified: integer("handicap_verified", { mode: "boolean" }).notNull().default(false),
+  /** Free text: iGolf number, overseas federation, who maintains a society handicap. */
+  handicapNote: text("handicap_note"),
   handicapUpdatedAt: text("handicap_updated_at"),
   createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
 }, (t) => ({

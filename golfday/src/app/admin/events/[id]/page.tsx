@@ -68,6 +68,8 @@ export default async function AdminEventPage({ params }: { params: Promise<{ id:
           golfEnglandId: player.golfEnglandId,
           claimCode: player.claimCode,
           userId: player.userId,
+          handicapSource: player.handicapSource,
+          handicapVerified: player.handicapVerified,
         },
         registration: {
           id: registration.id,

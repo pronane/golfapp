@@ -21,6 +21,9 @@ const ADDED_COLUMNS: string[] = [
   "ALTER TABLE societies ADD COLUMN handicap_api_secret TEXT",
   "ALTER TABLE societies ADD COLUMN handicap_client_token TEXT",
   "ALTER TABLE societies ADD COLUMN handicap_updated_at TEXT",
+  // handicap provenance (a player needs no club to have a handicap)
+  "ALTER TABLE players ADD COLUMN handicap_verified INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE players ADD COLUMN handicap_note TEXT",
   // social sign-in
   "ALTER TABLE users ADD COLUMN oauth_provider TEXT",
   "ALTER TABLE users ADD COLUMN oauth_subject TEXT",

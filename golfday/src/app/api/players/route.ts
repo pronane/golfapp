@@ -18,6 +18,8 @@ export const GET = route(async (request: Request) => {
       handicapIndex: players.handicapIndex,
       homeClub: players.homeClub,
       golfEnglandId: players.golfEnglandId,
+      handicapSource: players.handicapSource,
+      handicapVerified: players.handicapVerified,
       // email intentionally omitted: any signed-in user can search this
       // directory, so returning it let anyone harvest every golfer's address.
       hasAccount: sql<boolean>`${players.userId} is not null`,
@@ -38,12 +40,15 @@ export const POST = route(async (request: Request) => {
       id: newId(),
       name: body.name.trim(),
       email: body.email || null,
-      handicapIndex: body.handicapIndex,
+      // "No handicap yet" means scratch, not a number nobody vouches for.
+      handicapIndex: body.handicapSource === "NONE" ? 0 : body.handicapIndex,
       golfEnglandId: body.golfEnglandId || null,
       homeClub: body.homeClub || null,
       gender: body.gender ?? null,
       claimCode: newClaimCode(),
-      handicapSource: body.golfEnglandId ? "GOLF_ENGLAND" : "MANUAL",
+      handicapSource: body.handicapSource ?? (body.golfEnglandId ? "GOLF_ENGLAND" : "MANUAL"),
+      handicapVerified: false,
+      handicapNote: body.handicapNote?.trim() || null,
       handicapUpdatedAt: new Date().toISOString(),
     })
     .returning();

@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS players (
   gender TEXT,
   claim_code TEXT NOT NULL,
   handicap_source TEXT NOT NULL DEFAULT 'MANUAL',
+  handicap_verified INTEGER NOT NULL DEFAULT 0,
+  handicap_note TEXT,
   handicap_updated_at TEXT,
   created_at TEXT NOT NULL DEFAULT (current_timestamp)
 );

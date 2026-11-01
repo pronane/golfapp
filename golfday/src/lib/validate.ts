@@ -4,6 +4,22 @@ import { ApiError } from "./http";
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const timeString = z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM");
 
+/**
+ * How a player holds their handicap. `NONE` is a valid answer for a golfer with
+ * no club and no national handicap - it must never block an entry.
+ */
+export const handicapProvenanceSchema = z.enum([
+  "WHS",
+  "GOLF_ENGLAND",
+  "IGOLF",
+  "OVERSEAS",
+  "SOCIETY",
+  "MANUAL",
+  "CSV",
+  "API",
+  "NONE",
+]);
+
 export const registerSchema = z.object({
   name: z.string().min(2, "Please tell us your name").max(80),
   email: z.string().email("That email doesn't look right"),
@@ -11,6 +27,8 @@ export const registerSchema = z.object({
   handicapIndex: z.coerce.number().min(-10).max(54).optional(),
   golfEnglandId: z.string().max(30).optional(),
   homeClub: z.string().max(120).optional(),
+  handicapSource: handicapProvenanceSchema.optional(),
+  handicapNote: z.string().max(160).optional(),
 });
 
 export const loginSchema = z.object({
@@ -104,6 +122,8 @@ export const createPlayerSchema = z.object({
   golfEnglandId: z.string().max(30).optional(),
   homeClub: z.string().max(120).optional(),
   gender: z.enum(["M", "F", "X"]).optional(),
+  handicapSource: handicapProvenanceSchema.optional(),
+  handicapNote: z.string().max(160).optional(),
 });
 
 export const scoreSchema = z.object({

@@ -19,6 +19,8 @@ export const POST = route(async (request: Request) => {
     handicapIndex: body.handicapIndex ?? 0,
     golfEnglandId: body.golfEnglandId,
     homeClub: body.homeClub,
+    handicapSource: body.handicapSource,
+    handicapNote: body.handicapNote,
   });
   await setSessionCookie(await signSession({ uid: userId, email }));
   return json({ ok: true, userId });
