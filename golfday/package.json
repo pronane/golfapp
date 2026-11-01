@@ -15,7 +15,9 @@
     "e2e:friends": "node e2e/friends-journey.mjs",
     "lint": "next lint",
     "setup": "node install/setup.mjs all",
-    "gallery": "node demo/build-gallery.mjs"
+    "gallery": "node demo/build-gallery.mjs",
+    "seed:dump": "tsx scripts/demo-sql.ts dump",
+    "seed:import": "tsx scripts/demo-sql.ts import"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

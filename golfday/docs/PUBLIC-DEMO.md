@@ -42,7 +42,7 @@ turso db show golfday-demo --url                   # → libsql://golfday-demo-<
 turso db tokens create golfday-demo                # → DATABASE_AUTH_TOKEN (copy it once)
 ```
 
-Then, from a checkout of this repository:
+Then fill it, either from a checkout of this repository:
 
 ```bash
 cd golfday
@@ -53,11 +53,24 @@ npm run db:push     # applies src/db/schema.sql (idempotent)
 npm run db:reset    # the demo day: 3 golf days, accounts, a live board
 ```
 
-That is the same two commands as local development - `DATABASE_URL` is the only difference. If
-you would rather not run them from a laptop, the **Seed the demo database** workflow does exactly
-this from GitHub (secrets: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, optional variable `DEMO_URL`).
+...or, if you would rather not point Node at production, from the dump that lives in the
+repository. `seed/demo.sql` is the whole demo day as text - schema plus 649 rows - so it is one
+command and needs no environment at all:
 
-Check it worked: `turso db shell golfday-demo "select count(*) from players"` should not be 0.
+```bash
+turso db shell golfday-demo < golfday/seed/demo.sql
+```
+
+It drops and rebuilds every table before loading, which is also how you put a public demo back to
+normal after strangers have been poking at it. `npm run seed:dump` regenerates the file from
+whatever `DATABASE_URL` points at, and a test (`tests/demo-sql.test.ts`) replays it to prove the
+file still matches the schema.
+
+Either way, the **Seed the demo database** workflow does the same thing from GitHub (secrets:
+`DATABASE_URL`, `DATABASE_AUTH_TOKEN`, optional variable `DEMO_URL`) - or nightly, if you keep the
+schedule in `.github/workflows/demo-db.yml`.
+
+Check it worked: `turso db shell golfday-demo "select count(*) from players"` should be 18.
 
 ## 2. The app: Render (free, sleeping)
 
@@ -141,6 +154,10 @@ what makes a stranger's first 30 seconds work.
   session or a group token. For a link posted publicly, put a cheap per-IP limit in front
   (Cloudflare's free WAF rules, or `@vercel/firewall`).
 * `AUTH_SECRET` is per-deployment. Changing it logs everybody out - do not rotate it mid-demo.
+* The **Turso token** is a password for that database: it goes in the host's environment
+  variables and in GitHub Actions secrets, and nowhere else. Never paste it into a chat, an
+  issue, a commit or a screenshot - if it does leak, `turso db tokens revoke <name>` and make a
+  new one (revoking does not touch the data).
 * The floor really is £0: Turso (5 GB, no card) + Render (750 h, no card) or Vercel Hobby. The
   first thing you would hit is Render's idle sleep, not a bill.
 

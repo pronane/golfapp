@@ -53,6 +53,10 @@ npm run db:push        # idempotent DDL from src/db/schema.sql
 npm run db:seed
 ```
 
+No Node on the target machine? `seed/demo.sql` is the demo day as a single SQL file
+(`turso db shell golfday < seed/demo.sql`); it drops and rebuilds every table, so it is also the
+way to reset a demo. Regenerate it with `npm run seed:dump`.
+
 ### 3. Deploy
 
 ```bash
