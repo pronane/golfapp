@@ -109,7 +109,7 @@ export default async function EventPage({
             <Fact label="Players" value={`${registrations.length}/${event.maxPlayers}`} />
             <Fact label="Tee groups" value={String(groups.length)} />
             <Fact label="Par" value={String(par)} />
-            <Fact label="Join code" value={event.joinCode} mono />
+            {(access?.isAdmin || Boolean(mine)) && <Fact label="Join code" value={event.joinCode} mono />}
           </div>
           <div className="rounded-xl bg-ink/[0.03] p-3">
             <EventEntry

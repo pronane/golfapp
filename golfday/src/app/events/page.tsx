@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { listPublicEvents, STATUS_LABEL, STATUS_STYLE } from "@/lib/events";
 import { formatEventDate } from "@/lib/format";
@@ -8,9 +7,15 @@ import { LiveDot } from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The fixture list is public: every event on it is already public, and an event
+ * page and its leaderboard can be opened without an account. Asking a visitor to
+ * sign in before they may *see* the list was a dead end - the landing page
+ * invites strangers to "browse all events" and then hit a login wall. Entering
+ * or creating a day still needs an account, and says so.
+ */
 export default async function EventsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/events");
   const rows = await listPublicEvents(60);
 
   return (
@@ -21,14 +26,18 @@ export default async function EventsPage() {
           <h1 className="text-3xl font-extrabold tracking-tight">Golf days</h1>
           <p className="mt-1 text-[14px] text-ink/55">Open events you can enter, watch live, or both.</p>
         </div>
-        <Link href="/admin/events/new" className="btn-primary btn-sm">Create a golf day</Link>
+        {user ? (
+          <Link href="/admin/events/new" className="btn-primary btn-sm">Create a golf day</Link>
+        ) : (
+          <Link href="/login?next=/events" className="btn-primary btn-sm">Sign in to enter a day</Link>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.7fr_1fr]">
         <div className="space-y-3">
           {rows.length === 0 && (
             <div className="card card-pad text-center text-[14px] text-ink/55">
-              No public events yet. Create one and it will appear here.
+              {user ? "No public events yet. Create one and it will appear here." : "No public events yet - check back soon."}
             </div>
           )}
           {rows.map(({ event, playerCount }) => (
@@ -60,7 +69,17 @@ export default async function EventsPage() {
           ))}
         </div>
         <div className="space-y-4">
-          <JoinByCode />
+          {user ? (
+            <JoinByCode />
+          ) : (
+            <div className="card card-pad">
+              <h2 className="text-[15px] font-bold">Have a join code?</h2>
+              <p className="mt-1 text-[12.5px] text-ink/55">
+                Sign in to enter your organiser&apos;s 6-character code and put yourself in the field.
+              </p>
+              <Link href="/login?next=/events" className="btn-secondary btn-sm mt-3">Sign in</Link>
+            </div>
+          )}
           <div className="card card-pad">
             <h2 className="text-[15px] font-bold">How entries work</h2>
             <ul className="mt-2 space-y-2 text-[13px] text-ink/60">
