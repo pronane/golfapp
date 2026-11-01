@@ -28,6 +28,7 @@ type Refund = {
 
 type Data = {
   feePence: number;
+  paymentMode: "CASH" | "STRIPE";
   stripeEnabled: boolean;
   collectedPence: number;
   refundedPence: number;
@@ -150,8 +151,16 @@ export function PaymentsPanel({ eventId }: { eventId: string }) {
                 }`}
           </p>
         </div>
-        <span className={`pill ${data.stripeEnabled ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-ink/[0.04] text-ink/60 ring-ink/10"}`}>
-          {data.stripeEnabled ? "Card payments on (Stripe)" : "Card payments off - mark cash and transfers here"}
+        <span
+          className={`pill ${
+            data.paymentMode === "STRIPE" && data.stripeEnabled
+              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+              : "bg-sand-50 text-sand-700 ring-sand-200"
+          }`}
+        >
+          {data.paymentMode === "STRIPE" && data.stripeEnabled
+            ? "Card payments on (Stripe)"
+            : "Cash on the day - tick people off as they pay you"}
         </span>
       </div>
 
@@ -176,7 +185,7 @@ export function PaymentsPanel({ eventId }: { eventId: string }) {
                 <td className="font-semibold">{r.name}</td>
                 <td>{statusPill(r)}</td>
                 <td className="hidden text-[12.5px] text-ink/60 sm:table-cell">
-                  {r.method === "STRIPE" ? "Card" : r.method === "MANUAL" ? "Marked by organiser" : "—"}
+                  {r.method === "STRIPE" ? "Card" : r.method === "MANUAL" ? "Cash / transfer (you marked it)" : "—"}
                 </td>
                 <td className="text-right">
                   <div className="flex flex-wrap justify-end gap-3">

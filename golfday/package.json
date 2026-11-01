@@ -12,6 +12,7 @@
     "db:reset": "tsx scripts/seed.ts --reset",
     "test": "vitest run",
     "e2e": "node e2e/full-journey.mjs",
+    "e2e:friends": "node e2e/friends-journey.mjs",
     "lint": "next lint",
     "setup": "node install/setup.mjs all"
   },

@@ -25,6 +25,13 @@ export const POST = route(async (request: Request, ctx: Ctx) => {
   if (!bundle) throw new ApiError(404, "Event not found", "not_found");
   const entry = bundle.registrations.find((r) => r.player.id === playerId && r.registration.status === "REGISTERED");
   if (!entry) throw new ApiError(409, "Enter the event first, then pay", "player_not_registered");
+  // The organiser chose cash on the day; never send somebody to a card form.
+  if (settings.paymentMode !== "STRIPE") {
+    throw new ApiError(409, "This golf day is settled in cash with the organiser", "payment_offline");
+  }
+  if (settings.entryFeePence <= 0) {
+    throw new ApiError(409, "This golf day has no entry fee", "no_fee");
+  }
 
   const baseUrl = process.env.APP_URL ?? new URL(request.url).origin;
   const url = await createCheckout({

@@ -15,7 +15,7 @@ Afterwards:
 | Start it | `./start-golfday.sh` (macOS: double-click `start-golfday.command`) / `start-golfday.cmd` |
 | Open | <http://localhost:3000> |
 | Sign in | `admin@golfday.app` · `golfday123` (organiser) |
-| Re-run the check | `npm run e2e` |
+| Re-run the checks | `npm run e2e` and `npm run e2e:friends` |
 
 The installer is safe to run again: it never overwrites `.env`, never wipes your database,
 and the end-to-end run uses its own throwaway database file.
@@ -69,6 +69,11 @@ SQLite-specific); it is not something an installer can quietly switch on, so we 
 pretended otherwise.
 
 ## The end-to-end check
+
+There are two runs. `npm run e2e` is the club/organiser journey; `npm run e2e:friends` is
+the same harness on the case where one person sets up a day for three mates - no society,
+no roster, a course typed in by hand and an entry fee taken in cash. The installer runs
+both.
 
 `npm run e2e` starts the app on port 3210 (override with `E2E_PORT`), creates a throwaway
 database (`data/e2e-run.db`, deleted afterwards), and then, in a real browser:

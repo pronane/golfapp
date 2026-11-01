@@ -2,7 +2,7 @@
 
 | File | Length | What it shows |
 | --- | --- | --- |
-| [`golfday-start-to-finish.webm`](golfday-start-to-finish.webm) | 3:47 | **The whole process, one sitting, nothing faked.** An organiser starts a **society**, takes members from the player directory, opens an **order-of-merit season**, then builds a golf day from the club page: a three-step wizard, **Texas scramble** format, a card snapshotted from the course library, a field of eight, two four-balls allocated in one click, a £25 entry fee and a signed-up fixture. A player then opens **their team's** card, records the drive and the score for four holes, the public board updates live, the desk marks a cash entry paid and issues a **part-refund against that entry**, and the season's order of merit fills in. It ends on the **TV board** |
+| [`golfday-start-to-finish.webm`](golfday-start-to-finish.webm) | 3:50 | **The whole process, one sitting, nothing faked.** An organiser starts a **society**, takes members from the player directory, opens an **order-of-merit season**, then builds a golf day from the club page: a three-step wizard, **Texas scramble** format, a card snapshotted from the course library, a field of eight, two four-balls allocated in one click, a £25 entry fee and a signed-up fixture. A player then opens **their team's** card, records the drive and the score for four holes, the public board updates live, the desk marks a cash entry paid and issues a **part-refund against that entry**, and the season's order of merit fills in. It ends on the **TV board** |
 | [`golfday-product-tour.webm`](golfday-product-tour.webm) | 1:25 | The whole product: landing page and live leaderboard, sign in, player dashboard, the organiser console (field, groups, card, admins), the course library, the three-step "create a golf day" wizard, and a player signing up with their Golf England ID |
 | [`golfday-live-scoring.webm`](golfday-live-scoring.webm) | 0:49 | Two screens side by side: a four-ball entering scores on a phone and the clubhouse leaderboard updating live, including a correction |
 
@@ -69,6 +69,16 @@ node demo/mix-audio.mjs --video=demo/raw/journey.webm --audio=demo/narration \
 `APP_URL` overrides the target (default `http://127.0.0.1:3000`); `CHROME_PATH` points at a
 specific Chrome build. Each recording run writes `<name>.cues.json` with the exact second each
 caption appeared, so the narration plan can be re-cut without re-filming.
+
+A capture from Chrome's `MediaRecorder` carries no WebM Duration, so `mix-audio.mjs` cannot read
+the film's length. Pass it the length from the cue sheet, and ask for a held last frame if the
+closing line needs room:
+
+```bash
+node demo/mix-audio.mjs --video=demo/raw/journey.webm --audio=demo/narration \
+  --plan=demo/narration-journey.json --duration=221.8 --tail=8 \
+  --out=demo/golfday-start-to-finish.webm
+```
 
 `narration-*.json` is that plan: `{ file, start }` pairs pointing at the clips in
 `demo/narration/`. `mix-audio.mjs` validates the schedule (no clip may overrun the next one or

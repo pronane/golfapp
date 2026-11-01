@@ -344,29 +344,29 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
 
   return (
     <div className="space-y-5">
-      <header className="overflow-hidden rounded-2xl bg-fairway-950 text-white shadow-card">
+      <header className="hero overflow-hidden rounded-2xl shadow-card ring-1 ring-inset ring-fairway-200/70">
         <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-6 sm:px-7">
           <div>
-            <Link href="/societies" className="text-[12px] font-semibold text-fairway-100/60 hover:text-white">
+            <Link href="/societies" className="text-[12px] font-semibold hero-muted hover:text-fairway-700">
               ← Societies
             </Link>
             <h1 className="mt-1 text-3xl font-extrabold tracking-tight">{society.name}</h1>
-            <p className="mt-1 text-[13px] text-fairway-100/70">
+            <p className="mt-1 text-[13px] hero-muted">
               {society.homeClub ?? "No home club"} · {roster.length} member{roster.length === 1 ? "" : "s"} · {fixtureList.length} fixture
               {fixtureList.length === 1 ? "" : "s"}
             </p>
-            {society.description && <p className="mt-2 max-w-2xl text-[13px] text-fairway-100/70">{society.description}</p>}
+            {society.description && <p className="mt-2 max-w-2xl text-[13px] hero-muted">{society.description}</p>}
           </div>
           <div className="space-y-2 text-right">
-            {role && <span className="pill bg-white/10 text-white/80 ring-white/20">{roleLabel(role)}</span>}
+            {role && <span className="pill hero-chip">{roleLabel(role)}</span>}
             {canManage && (
-              <div className="rounded-xl bg-white/[0.06] p-3 ring-1 ring-inset ring-white/10">
-                <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-100/50">Join code</div>
+              <div className="rounded-xl bg-white/60 p-3 ring-1 ring-inset ring-fairway-200/70">
+                <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-700/60">Join code</div>
                 <div className="mt-0.5 flex items-center justify-end gap-2">
                   <span className="font-mono text-[19px] font-extrabold tracking-[0.18em]">{society.joinCode}</span>
                   <CopyButton value={society.joinCode} label="Copy" />
                 </div>
-                <p className="mt-1 text-[11px] text-fairway-100/50">Share it with members to let them join.</p>
+                <p className="mt-1 text-[11px] hero-muted">Share it with members to let them join.</p>
               </div>
             )}
           </div>

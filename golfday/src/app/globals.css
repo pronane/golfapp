@@ -7,13 +7,14 @@
 }
 
 html, body {
-  @apply bg-[#f6f7f2] text-ink antialiased;
+  @apply bg-[#fbfaf5] text-ink antialiased;
 }
 
 body {
   background-image:
-    radial-gradient(1200px 600px at 100% -10%, rgba(33, 154, 103, 0.08), transparent 60%),
-    radial-gradient(900px 500px at -10% 0%, rgba(221, 166, 78, 0.09), transparent 55%);
+    radial-gradient(1100px 560px at 100% -10%, rgba(178, 213, 193, 0.34), transparent 62%),
+    radial-gradient(900px 520px at -10% 0%, rgba(244, 224, 189, 0.42), transparent 58%),
+    radial-gradient(700px 420px at 50% 110%, rgba(246, 210, 203, 0.28), transparent 60%);
   background-attachment: fixed;
 }
 
@@ -40,11 +41,16 @@ body {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition
       focus:outline-none focus-visible:ring-2 focus-visible:ring-fairway-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
   }
-  .btn-primary { @apply btn bg-fairway-700 text-white shadow-sm hover:bg-fairway-800 active:bg-fairway-900; }
-  .btn-secondary { @apply btn bg-white text-ink ring-1 ring-inset ring-ink/10 hover:bg-ink/[0.03]; }
+  /* Pastel fills with deep text: softer than a saturated block, and higher
+     contrast than white-on-green ever was. */
+  .btn-primary {
+    @apply btn bg-fairway-300 text-fairway-950 shadow-sm ring-1 ring-inset ring-fairway-400/70
+      hover:bg-fairway-400/90 active:bg-fairway-400;
+  }
+  .btn-secondary { @apply btn bg-white/90 text-ink ring-1 ring-inset ring-ink/10 hover:bg-white; }
   .btn-ghost { @apply btn text-ink/70 hover:bg-ink/[0.04]; }
-  .btn-sand { @apply btn bg-sand-400 text-ink shadow-sm hover:bg-sand-500; }
-  .btn-danger { @apply btn bg-rose-600 text-white hover:bg-rose-700; }
+  .btn-sand { @apply btn bg-sand-200 text-sand-700 shadow-sm ring-1 ring-inset ring-sand-300 hover:bg-sand-300; }
+  .btn-danger { @apply btn bg-rose-100 text-rose-800 ring-1 ring-inset ring-rose-200 hover:bg-rose-200; }
   .btn-sm { @apply px-3 py-1.5 text-[13px]; }
   .pill {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold ring-1 ring-inset;
@@ -55,6 +61,20 @@ body {
   }
   .table-base td { @apply border-t border-ink/[0.06] px-3 py-2.5; }
   .link { @apply font-medium text-fairway-700 underline decoration-fairway-300 underline-offset-2 hover:text-fairway-900; }
+
+  /* The pastel "hero" surface that replaces the near-black header blocks. */
+  .hero {
+    @apply text-fairway-950;
+    background-image:
+      radial-gradient(700px 320px at 92% -20%, rgba(178, 213, 193, 0.85), transparent 68%),
+      radial-gradient(520px 300px at 4% 120%, rgba(246, 210, 203, 0.72), transparent 64%),
+      linear-gradient(135deg, #eaf4ee 0%, #f6f1e6 60%, #fbe9e5 100%);
+  }
+  .hero-chip {
+    @apply rounded-full bg-white/70 text-fairway-900 ring-1 ring-inset ring-fairway-200/80;
+  }
+  .hero-muted { @apply text-fairway-800/70; }
+  .hero-soft { @apply bg-white/60 ring-1 ring-inset ring-fairway-200/70; }
 }
 
 .score-flash { animation: flash-in 1.4s ease-out; }

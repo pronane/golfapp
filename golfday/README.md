@@ -83,6 +83,7 @@ npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
 npm test           # 122 unit tests
 npm run e2e        # the browser click-through (own database, own server)
+npm run e2e:friends # the friends' day: no society, hand-typed course, cash entry
 npm run setup      # env + schema + launchers + checks, no browser run
 ```
 
@@ -158,6 +159,13 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   roster** - so the same regulars do not have to be searched and added one at a time
   every month (anyone full or already playing that day is skipped and reported, not
   silently dropped).
+* **Two ways in, one app** - the home page offers *One day, a few friends* alongside
+  *A whole season*, and the wizard defaults to **Me and my friends**, so a solo organiser
+  never has to make a society, a roster or a club to run a Sunday fourball. A course that
+  is not in the library is typed in (and saved), and an entry fee defaults to **cash on the
+  day**: players are told to bring it, the organiser ticks people off in Payments, and a
+  card button only appears if the organiser explicitly chooses card payments *and* the
+  deployment has Stripe keys. `npm run e2e:friends` proves that path in a browser.
 * **A handicap without a club** - a player can be WHS, iGolf, an overseas system (GHIN,
   Golf Canada, Golf Australia), a society handicap, typed in by hand, or have **no handicap
   yet** (scratch). Anyone can register and enter a golf day regardless; only a national

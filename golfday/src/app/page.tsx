@@ -24,80 +24,73 @@ export default async function HomePage() {
   return (
     <div className="space-y-14">
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-[28px] bg-fairway-950 px-6 py-12 text-white sm:px-12 sm:py-16">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-70"
-          style={{
-            backgroundImage:
-              "radial-gradient(700px 300px at 85% 0%, rgba(33,154,103,.55), transparent 65%), radial-gradient(500px 260px at 10% 110%, rgba(221,166,78,.28), transparent 60%)",
-          }}
-        />
+      <section className="hero relative overflow-hidden rounded-[28px] px-6 py-12 shadow-card ring-1 ring-inset ring-fairway-200/70 sm:px-12 sm:py-14">
         <div className="relative grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
           <div>
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-fairway-100 ring-1 ring-inset ring-white/15">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-fairway-800 ring-1 ring-inset ring-fairway-200">
               <FlagMark className="h-4 w-4 rounded-[5px]" /> Live scoring for golf days
             </div>
-            <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl">
+            <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-tight text-fairway-950 sm:text-5xl">
               Run the golf day.<br />
-              <span className="text-sand-300">Watch the leaderboard fill up.</span>
+              <span className="text-fairway-600">Watch the leaderboard fill up.</span>
             </h1>
-            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-fairway-100/80">
-              Pick the course, pull handicaps from Golf England, put players into tee groups and send each
-              group a live scorecard link. Every score updates the leaderboard instantly - no spreadsheets,
-              no WhatsApp photo of a card.
+            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-fairway-800/80">
+              One organiser, a handful of friends or a whole society: pick the course (or type the card in),
+              put players into tee groups and send each group a live scorecard link. Every score updates the
+              leaderboard instantly - no spreadsheets, no WhatsApp photo of a card.
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3">
-              <Link href={user ? "/admin/events/new" : "/register"} className="btn-sand">
+              <Link href={user ? "/admin/events/new" : "/register"} className="btn-primary">
                 {user ? "Create a golf day" : "Get started free"} <Arrow />
               </Link>
               {live && (
-                <Link href={`/live/${live.slug}`} className="btn bg-white/10 text-white ring-1 ring-inset ring-white/20 hover:bg-white/15">
+                <Link href={`/live/${live.slug}`} className="btn-secondary">
                   <LiveDot /> Watch the live demo
                 </Link>
               )}
             </div>
-            <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-[12.5px] text-fairway-100/65">
-              <span>✓ Stableford &amp; net stroke play</span>
-              <span>✓ WHS course handicaps</span>
-              <span>✓ 18-hole card builder</span>
+            <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-[12.5px] text-fairway-800/70">
+              <span>✓ Free to run</span>
+              <span>✓ No club or handicap needed</span>
+              <span>✓ Cash or card, your choice</span>
               <span>✓ No app to install</span>
             </div>
           </div>
 
           {/* Live preview card */}
-          <div className="rounded-2xl bg-white/[0.06] p-2 ring-1 ring-inset ring-white/15">
+          <div className="rounded-2xl bg-white/60 p-2 ring-1 ring-inset ring-fairway-200/80">
             {live && board ? (
-              <div className="rounded-xl bg-fairway-900/80 p-4">
+              <div className="rounded-xl bg-white/80 p-4 ring-1 ring-inset ring-fairway-100">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-sand-300">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-fairway-600">
                       <LiveDot /> In progress
                     </div>
-                    <div className="mt-1 text-[15px] font-bold">{live.name}</div>
-                    <div className="text-[12px] text-fairway-100/60">{board.event.courseName}</div>
+                    <div className="mt-1 text-[15px] font-bold text-fairway-950">{live.name}</div>
+                    <div className="text-[12px] text-fairway-800/60">{board.event.courseName}</div>
                   </div>
-                  <span className="pill bg-white/10 text-fairway-100 ring-white/15">{formatEventDate(live.date)}</span>
+                  <span className="pill bg-sand-100 text-sand-700 ring-sand-200">{formatEventDate(live.date)}</span>
                 </div>
                 <div className="mt-4 space-y-2">
                   {top.map((s, i) => (
-                    <div key={s.playerId} className="flex items-center gap-3 rounded-lg bg-white/[0.05] px-3 py-2">
-                      <span className="w-4 text-center text-[12px] font-bold text-sand-300">{i + 1}</span>
-                      <span className="flex-1 truncate text-[13.5px] font-medium">{s.playerName}</span>
-                      <span className="text-[11px] text-fairway-100/50">thru {s.thru}</span>
-                      <span className="w-10 text-right font-mono text-[13.5px] font-bold">{s.points}</span>
+                    <div key={s.playerId} className="flex items-center gap-3 rounded-lg bg-fairway-50 px-3 py-2 ring-1 ring-inset ring-fairway-100">
+                      <span className="w-4 text-center text-[12px] font-bold text-fairway-600">{i + 1}</span>
+                      <span className="flex-1 truncate text-[13.5px] font-medium text-fairway-950">{s.playerName}</span>
+                      <span className="text-[11px] text-fairway-800/50">thru {s.thru}</span>
+                      <span className="w-10 text-right font-mono text-[13.5px] font-bold text-fairway-900">{s.points}</span>
                     </div>
                   ))}
-                  {top.length === 0 && <div className="py-6 text-center text-[13px] text-fairway-100/60">Waiting for the first card…</div>}
+                  {top.length === 0 && <div className="py-6 text-center text-[13px] text-fairway-800/60">Waiting for the first card…</div>}
                 </div>
-                <div className="mt-3 flex items-center justify-between text-[11.5px] text-fairway-100/50">
+                <div className="mt-3 flex items-center justify-between text-[11.5px] text-fairway-800/50">
                   <span>{board.stats.registered} players · {board.stats.scoresEntered} holes scored</span>
-                  <Link className="font-semibold text-sand-300 hover:text-sand-200" href={`/live/${live.slug}`}>
+                  <Link className="font-semibold text-fairway-700 hover:text-fairway-900" href={`/live/${live.slug}`}>
                     Full board →
                   </Link>
                 </div>
               </div>
             ) : (
-              <div className="rounded-xl bg-fairway-900/70 p-8 text-center text-[13px] text-fairway-100/60">
+              <div className="rounded-xl bg-white/70 p-8 text-center text-[13px] text-fairway-800/60 ring-1 ring-inset ring-fairway-100">
                 No event in play right now - create one to see it here.
               </div>
             )}
@@ -105,17 +98,57 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* Two ways in */}
+      <section className="grid gap-4 md:grid-cols-2">
+        <div className="card card-pad ring-1 ring-inset ring-blush-200/70">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-blush-100 px-3 py-1 text-[11.5px] font-semibold uppercase tracking-wide text-blush-600">
+            Friends &amp; family
+          </div>
+          <h2 className="text-xl font-bold tracking-tight">One day, a few friends</h2>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-ink/65">
+            No society, no committee, no card payments to set up. Put the four-ball together, split the
+            green fee in cash, and hand out one scorecard link. It takes about five minutes and costs nothing.
+          </p>
+          <ul className="mt-3 space-y-1.5 text-[13px] text-ink/60">
+            <li>✓ Course not on the list? Type the card in yourself.</li>
+            <li>✓ <span className="font-medium text-ink/80">Cash on the day</span> - tick people off as they pay you.</li>
+            <li>✓ Anyone can play with no handicap, or a rough one.</li>
+          </ul>
+          <Link href={user ? "/admin/events/new" : "/register"} className="btn-primary btn-sm mt-4">
+            Set up a day with friends <Arrow />
+          </Link>
+        </div>
+        <div className="card card-pad ring-1 ring-inset ring-fairway-200/70">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-fairway-100 px-3 py-1 text-[11.5px] font-semibold uppercase tracking-wide text-fairway-700">
+            Clubs &amp; societies
+          </div>
+          <h2 className="text-xl font-bold tracking-tight">A whole season</h2>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-ink/65">
+            A society with a roster, fixtures through the year, a season order of merit, tee groups drawn
+            automatically and handicaps pulled from your club&apos;s own system where you have credentials.
+          </p>
+          <ul className="mt-3 space-y-1.5 text-[13px] text-ink/60">
+            <li>✓ Roster, join code and roles for the committee.</li>
+            <li>✓ WHS, GHIN, iGolf or a society handicap - all welcome.</li>
+            <li>✓ Card payments with refunds, if you want them.</li>
+          </ul>
+          <Link href={user ? "/societies" : "/register"} className="btn-secondary btn-sm mt-4">
+            Start a society <Arrow />
+          </Link>
+        </div>
+      </section>
+
       {/* Features */}
       <section>
         <h2 className="text-2xl font-bold tracking-tight">Everything a golf day needs</h2>
         <p className="mt-2 max-w-2xl text-[15px] text-ink/60">
-          Built around how a club actually runs an outing: one organiser, tee groups, a card per player and a
+          Built around how people actually run an outing - one organiser, tee groups, a card per player and a
           leaderboard everybody can see.
         </p>
         <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
             { title: "Course catalogue, 18 holes", body: "Search a free course database or type your own par and stroke index card. The card is snapshotted per event so edits never rewrite history." },
-            { title: "Players & handicaps", body: "Import players from a CSV or pull handicap indexes from Golf England. Course and playing handicaps are calculated with the WHS slope formula." },
+            { title: "Players & handicaps", body: "Type them in, import a CSV or pull indexes from a national database. A player with no handicap at all can still enter. Course and playing handicaps use the WHS slope formula." },
             { title: "Tee groups & admin roles", body: "Auto-allocate four-balls, drag players between groups and give a helper scorer access to just one day." },
             { title: "Live group scorecards", body: "Each group gets a private link. Score entry is three taps: pick the hole, pick the player, tap the score - it saves instantly." },
             { title: "Live leaderboard", body: "A separate public URL for the clubhouse screen. It updates within two seconds of a card changing and shows thru, gross, points and to-par." },

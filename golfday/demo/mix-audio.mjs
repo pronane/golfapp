@@ -68,8 +68,23 @@ window.__load = async (videoB64) => {
   v.src = url; v.muted = false; v.playsInline = true;
   document.body.appendChild(v);
   await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('video load failed')); });
+  // A MediaRecorder WebM carries no Duration element, so Chrome reports
+  // Infinity. Once the blob is fully buffered the last buffered range gives the
+  // real length, which is what the narration schedule is cut against.
+  if (!Number.isFinite(v.duration)) {
+    await new Promise((res) => {
+      v.oncanplaythrough = () => res();
+      setTimeout(res, 6000);
+    });
+    v.oncanplaythrough = null;
+  }
+  const duration = Number.isFinite(v.duration)
+    ? v.duration
+    : v.buffered.length
+      ? v.buffered.end(v.buffered.length - 1)
+      : NaN;
   window.__video = v;
-  return { duration: v.duration, w: v.videoWidth, h: v.videoHeight };
+  return { duration, w: v.videoWidth, h: v.videoHeight };
 };
 window.__decodeClips = async (clips) => {
   const ctx = new AudioContext({ sampleRate: 48000 });
@@ -144,6 +159,11 @@ window.__record = async (mime, opts) => {
   await v.play();
   draw();
   await new Promise((res) => { v.onended = res; });
+  if (opts.tail) {
+    // Hold the last frame: the closing narration needs somewhere to land, and
+    // the canvas already has the final picture on it.
+    await new Promise((r) => setTimeout(r, opts.tail * 1000));
+  }
   clearInterval(window.__meterTimer);
   window.__meterPeak = window.__peak;
   await new Promise((r) => setTimeout(r, 400));
@@ -183,9 +203,15 @@ window.__probeAudio = async (b64, mime) => {
 };
 </script></body></html>`);
 
-const meta = await page.evaluate((b64) => window.__load(b64), videoB64);
+const loaded = await page.evaluate((b64) => window.__load(b64), videoB64);
+const meta = { ...loaded, duration: Number.isFinite(loaded.duration) ? loaded.duration : Number(args.duration) };
+if (!Number.isFinite(meta.duration) || meta.duration < 1) {
+  throw new Error("cannot read the video's length: pass --duration=<seconds> (see the .cues.json)");
+}
+const tail = Number(args.tail ?? 0);
+const total = meta.duration + tail;
 const durations = await page.evaluate((clips) => window.__decodeClips(clips), clips.map(({ b64, ...rest }) => ({ ...rest, b64 })));
-console.log('video', meta);
+console.log('video', meta, tail ? `+ ${tail}s hold` : "");
 console.log('clips', durations.map((d) => `${d.file} ${d.duration.toFixed(2)}s @${d.start} peak ${d.peak}`).join(' | '));
 
 // validate the schedule: a clip may not run into the next one (0.15s grace) or past the video
@@ -194,7 +220,7 @@ let problems = 0;
 const sorted = [...durations].sort((a, b) => a.start - b.start);
 sorted.forEach((clip, i) => {
   const next = sorted[i + 1];
-  const limit = Math.min(next ? next.start - 0.15 : meta.duration - 0.3, meta.duration - 0.3);
+  const limit = Math.min(next ? next.start - 0.15 : total - 0.3, total - 0.3);
   const available = limit - clip.start;
   let rate = 1;
   if (clip.duration > available) {
@@ -207,7 +233,7 @@ sorted.forEach((clip, i) => {
 
 const mime = args.mime ?? 'video/webm;codecs=vp9,opus';
 console.log('recording with', mime, '(problems:', problems, ')');
-const result = await page.evaluate((mime, schedule) => window.__record(mime, { schedule }), mime, schedule);
+const result = await page.evaluate((mime, schedule, tailSeconds) => window.__record(mime, { schedule, tail: tailSeconds }), mime, schedule, tail);
 fs.writeFileSync(outFile, Buffer.from(result.b64, 'base64'));
 console.log(`wrote ${outFile} ${(result.size / 1024 / 1024).toFixed(2)} MB ${result.type}`);
 console.log(`audio tracks: ${result.audioTracks}, peak level reaching the recorder: ${result.meterPeak?.toFixed(3)}`);

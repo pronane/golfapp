@@ -84,6 +84,8 @@ class Recorder {
     r.page = page;
     r.rec = rec;
     r.caption = null;
+    r.authUser = null;
+    r.heartbeat = null;
     r.cues = [];
     r.t0 = 0;
     return r;
@@ -117,10 +119,80 @@ class Recorder {
     await this.rec.evaluate(() => (window.__paused = false));
   }
 
+  /**
+   * Sign in again from inside the page, without showing the form: the demo
+   * browser can lose the session cookie partway through a long journey, and a
+   * recorder that stops to film a login it did not plan is worse than useless.
+   */
+  async reauth() {
+    if (!this.authUser) return false;
+    const user = this.authUser;
+    const status = await this.page
+      .evaluate(async (u) => {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(u),
+        });
+        return res.status;
+      }, user)
+      .catch(() => 0);
+    return status === 200;
+  }
+
+  /**
+   * The sandboxed headless browser drops the session cookie every half a minute
+   * or so, which would strand a long journey on a login page. Ping a route that
+   * needs a session and sign in again (invisibly) when it says 401.
+   */
+  startHeartbeat(ms = 8000) {
+    this.stopHeartbeat();
+    this.heartbeat = setInterval(() => void this.keepSession(), ms);
+    this.heartbeat.unref?.();
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    this.heartbeat = null;
+  }
+
+  async keepSession() {
+    if (!this.authUser) return;
+    const status = await this.page
+      .evaluate(async () => {
+        try {
+          return (await fetch("/api/players?q=__session_ping__")).status;
+        } catch {
+          return 0;
+        }
+      })
+      .catch(() => 0);
+    if (status === 401) await this.reauth();
+  }
+
+  /**
+   * If a click or a redirect dropped us on the login page, sign in again and go
+   * back to where the journey was headed. Returns true when it had to.
+   */
+  async healLogin() {
+    const current = this.page.url();
+    if (!current.includes("/login?next=")) return false;
+    const next = new URL(current).searchParams.get("next") || "/";
+    await this.reauth();
+    await this.page.goto(BASE + next, { waitUntil: "domcontentloaded" });
+    await sleep(1200);
+    return true;
+  }
+
   async goto(url, caption) {
     this.mark(`GOTO: ${url}`);
     if (caption) this.say(caption);
-    await this.page.goto(url.startsWith("file:") ? url : BASE + url, { waitUntil: "domcontentloaded" });
+    const target = url.startsWith("file:") ? url : BASE + url;
+    await this.page.goto(target, { waitUntil: "domcontentloaded" });
+    if (!url.startsWith("file:") && this.page.url().includes("/login?next=")) {
+      await this.reauth();
+      await this.page.goto(target, { waitUntil: "domcontentloaded" });
+    }
     await sleep(1900);
   }
 
@@ -131,6 +203,7 @@ class Recorder {
 
   /** Click via a DOM query evaluated in the page (useful for repeated labels). */
   async clickIn(fn, { caption, settle = 1400, arg } = {}) {
+    await this.healLogin();
     if (caption) this.say(caption);
     const box = await this.page.evaluate(fn, arg);
     if (!box) throw new Error("clickIn: element not found");
@@ -147,6 +220,7 @@ class Recorder {
    * reuse "Add" / "Enter", so scope the query first.
    */
   async clickButton(heading, label, { caption, settle = 1400 } = {}) {
+    await this.healLogin();
     if (caption) this.say(caption);
     const find = (h, l) => {
       const section = [...document.querySelectorAll("section")].find((s) =>
@@ -184,6 +258,7 @@ class Recorder {
   }
 
   async click(selector, { caption, settle = 1400 } = {}) {
+    await this.healLogin();
     if (caption) this.say(caption);
     const handle = await this.page.waitForSelector(selector, { visible: true, timeout: 25000 });
     const box = await handle.boundingBox();
@@ -196,18 +271,58 @@ class Recorder {
     await sleep(settle);
   }
 
+  /**
+   * Switch console tabs. The tab bar can be under a flash notice when the click
+   * lands, so retry until the panel a tab owns is actually on screen.
+   */
+  async tab(label, marker) {
+    const open = () =>
+      this.page.evaluate(
+        (m) => [...document.querySelectorAll("section h2")].some((h) => h.textContent.includes(m)),
+        marker,
+      );
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      // The tab bar sits under the page header: from a scrolled-down page the
+      // pointer click lands on the sticky nav instead of the tab.
+      await this.page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+      await sleepLong(500);
+      if (attempt === 0) {
+        await this.click(`button::-p-text(${label})`, { settle: 1600 });
+      } else {
+        const clicked = await this.page.evaluate((l) => {
+          const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === l);
+          if (!button) return false;
+          button.click();
+          return true;
+        }, label);
+        if (!clicked) {
+          await sleepLong(900); // the panel can be mid-refresh
+          continue;
+        }
+        await sleepLong(1700);
+      }
+      if (await open()) return;
+    }
+    throw new Error(`tab ${label} would not open`);
+  }
+
+
   async type(selector, text, { caption, delay = 45 } = {}) {
+    await this.healLogin();
     if (caption) this.say(caption);
     const handle = await this.page.waitForSelector(selector, { visible: true, timeout: 25000 });
     const box = await handle.boundingBox();
     if (box) await this.moveTo(box.x + 20, box.y + box.height / 2, 10);
     await handle.click();
-    // Clear with the keyboard: a controlled input can ignore a triple-click
-    // select-all, which leaves the old text in front of the new query.
-    await this.page.keyboard.down("Control");
-    await this.page.keyboard.press("KeyA");
-    await this.page.keyboard.up("Control");
-    await this.page.keyboard.press("Backspace");
+    // Clear the React way, not with the keyboard: a controlled input ignores
+    // select-all, which leaves a default value ("2026 Order of Merit") in front
+    // of the new text and turns it into one long slug.
+    await handle.evaluate((el) => {
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      setter.call(el, "");
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await sleep(150);
     await handle.type(text, { delay });
     await sleep(420);
@@ -218,6 +333,7 @@ class Recorder {
    * the browser-rendered segments, which produces nonsense dates like 70612-02-02.
    */
   async setValue(selector, value, { caption } = {}) {
+    await this.healLogin();
     if (caption) this.say(caption);
     const handle = await this.page.waitForSelector(selector, { visible: true, timeout: 25000 });
     const box = await handle.boundingBox();
@@ -266,6 +382,7 @@ const sleepLong = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function waitFor(demo, predicate, label, tries = 100) {
   for (let i = 0; i < tries; i += 1) {
+    if (await demo.healLogin()) continue;
     if (await predicate()) return true;
     await sleepLong(250);
   }
@@ -292,6 +409,8 @@ async function journey() {
   await demo.type("#password", "golfday123");
   await demo.click("button[type=submit]", { settle: 3200, caption: "Into everything they organise." });
   await demo.shot("signed-in");
+  demo.authUser = { email: "admin@golfday.app", password: "golfday123" };
+  demo.startHeartbeat();
 
   await demo.goto("/societies", "3. A society keeps a roster, a fixture list and a season in one place.");
   await demo.shot("societies");
@@ -363,8 +482,23 @@ async function journey() {
   await demo.say("A season has a window: only golf days played inside it score.");
   await sleepLong(900);
   await demo.shot("season-form");
-  await demo.click(el.byText("Create season"), { settle: 2800, caption: "A win is worth 100, second 90, and so on down the field." });
-  await waitFor(demo, () => demo.page.url().includes("/seasons/"), "the season page");
+  // The form is a client action: if the header re-renders under the pointer the
+  // click can vanish, so nudge it again from inside the page.
+  let seasonCreated = false;
+  for (let attempt = 0; attempt < 3 && !seasonCreated; attempt += 1) {
+    if (attempt === 0) {
+      await demo.click(el.byText("Create season"), { settle: 2800, caption: "A win is worth 100, second 90, and so on down the field." });
+    } else {
+      await demo.page.evaluate(() => {
+        const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Create season");
+        button?.scrollIntoView({ block: "center" });
+        button?.click();
+      });
+      await sleepLong(2200);
+    }
+    seasonCreated = await waitFor(demo, () => demo.page.url().includes("/seasons/"), "the season page", 24).catch(() => false);
+  }
+  if (!seasonCreated) throw new Error("the season would not create");
   await sleepLong(1200);
   await demo.shot("season-empty");
 
@@ -426,7 +560,7 @@ async function journey() {
    * a row can hit the same player again (and the API rightly refuses). Search,
    * click that specific row, then wait for the registration to land in the db.
    */
-  async function addPlayer(name, caption) {
+  async function addPlayer(name, caption, attempt = 0) {
     const before = await fieldCount();
     const findRow = (firstName) =>
       demo.page.evaluate((firstName) => {
@@ -456,9 +590,13 @@ async function journey() {
     await sleepLong(200);
     await demo.page.mouse.click(box.x, box.y);
     for (let i = 0; i < 40; i += 1) {
-      if ((await fieldCount()) > before) break;
+      if ((await fieldCount()) > before) return;
       await sleepLong(250);
     }
+    // The list can re-render between finding the row and clicking it; search
+    // again from a clean box rather than leaving a gap in the field.
+    if (attempt < 2) return addPlayer(name, attempt === 0 ? caption : null, attempt + 1);
+    throw new Error(`${name} would not go into the field`);
   }
 
   const field = ["Mei", "Gareth", "James", "Tom", "Nina", "Ravi", "Sam", "Priya"];
@@ -486,12 +624,13 @@ async function journey() {
   await demo.scroll(-420, { settle: 600 });
 
   // ── Money ────────────────────────────────────────────────────────────────
-  await demo.click(el.byText("Games"), { caption: "10. £25 a head. Card payments go through Stripe when it is switched on; today the desk takes cash." });
+  await demo.tab("Games", "Entry fee");
+  await demo.say("10. £25 a head. Card payments go through Stripe when it is switched on; today the desk takes cash.");
   await demo.type("#g-fee", "25");
   await demo.clickButton("Entry fee", "Save fee", { settle: 2000, caption: "Saved." });
   await demo.shot("entry-fee");
 
-  await demo.click(el.byText("Overview"), { settle: 1400 });
+  await demo.tab("Overview", "Run the day");
   await demo.clickButton("Run the day", "In progress", { settle: 2400, caption: "11. Open the day: scoring unlocks and the board goes live." });
   await demo.shot("day-open");
 
@@ -504,11 +643,15 @@ async function journey() {
   await demo.shot("season-fixture");
 
   // ── The player, on the course ────────────────────────────────────────────
+  demo.authUser = null; // the sign-out below is deliberate, so don't undo it
+  await demo.stopHeartbeat();
   await demo.page.evaluate(() => fetch("/api/auth/logout", { method: "POST" }));
   await demo.goto("/login", "13. Now a player's phone: Sam, in the field, with a team to keep score for.");
   await demo.type("#email", "sam@golfday.app");
   await demo.type("#password", "golfday123");
   await demo.click("button[type=submit]", { settle: 3000, caption: "Signed in as a player." });
+  demo.authUser = { email: "sam@golfday.app", password: "golfday123" };
+  demo.startHeartbeat();
 
   await demo.goto(`/events/${event.slug}`, "14. The day as the field sees it: teams, tee times and the live board.");
   await demo.shot("event-page");
@@ -610,14 +753,19 @@ async function journey() {
   await demo.shot("live-board-updated");
 
   // ── The money, back at the desk ──────────────────────────────────────────
+  demo.authUser = null; // signing back in as the organiser is deliberate
+  await demo.stopHeartbeat();
   await demo.page.evaluate(() => fetch("/api/auth/logout", { method: "POST" }));
   await demo.goto("/login", "17. Back at the desk: the money.");
   await demo.type("#email", "admin@golfday.app");
   await demo.type("#password", "golfday123");
   await demo.click("button[type=submit]", { settle: 3000 });
+  demo.authUser = { email: "admin@golfday.app", password: "golfday123" };
+  demo.startHeartbeat();
 
   await demo.goto(`/admin/events/${event.id}`, "18. The organiser console for this day.");
-  await demo.click(el.byText("Payments"), { caption: "19. Who has paid - and a refund recorded against that entry." });
+  await demo.tab("Payments", "Entry fees");
+  await demo.say("19. Who has paid - and a refund recorded against that entry.");
   await demo.clickButton("Entry fees", "Mark paid", { settle: 2000, caption: "A player paid their £25 in cash - the organiser marks it here." });
   await sleepLong(600);
   await demo.shot("payments");

@@ -21,6 +21,8 @@ const ADDED_COLUMNS: string[] = [
   "ALTER TABLE societies ADD COLUMN handicap_api_secret TEXT",
   "ALTER TABLE societies ADD COLUMN handicap_client_token TEXT",
   "ALTER TABLE societies ADD COLUMN handicap_updated_at TEXT",
+  // how an entry fee is collected (cash is the default)
+  "ALTER TABLE event_settings ADD COLUMN payment_mode TEXT NOT NULL DEFAULT 'CASH'",
   // handicap provenance (a player needs no club to have a handicap)
   "ALTER TABLE players ADD COLUMN handicap_verified INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE players ADD COLUMN handicap_note TEXT",

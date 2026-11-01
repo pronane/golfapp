@@ -5,7 +5,7 @@ import { FlagMark } from "./Icons";
 
 export function Nav({ user }: { user: SessionUser | null }) {
   return (
-    <header className="no-print sticky top-0 z-30 border-b border-ink/[0.07] bg-[#f6f7f2]">
+    <header className="no-print sticky top-0 z-30 border-b border-ink/[0.06] bg-[#fbfaf5]/90 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2.5">
           <FlagMark className="h-8 w-8" />
@@ -24,7 +24,7 @@ export function Nav({ user }: { user: SessionUser | null }) {
                 <div className="text-[13px] font-semibold leading-tight">{user.name}</div>
                 <div className="text-[11px] leading-tight text-ink/45">{user.isSiteAdmin ? "Site admin" : "Player"}</div>
               </Link>
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-fairway-700 text-[13px] font-bold text-white">
+              <div className="grid h-9 w-9 place-items-center rounded-full bg-fairway-300 text-[13px] font-bold text-fairway-950 ring-1 ring-inset ring-fairway-400/60">
                 {user.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
               </div>
               <LogoutButton />

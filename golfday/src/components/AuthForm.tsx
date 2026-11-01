@@ -279,21 +279,21 @@ export function AuthForm({
         </p>
       </div>
 
-      <div className="card card-pad bg-fairway-950 text-white">
+      <div className="hero card card-pad ring-1 ring-inset ring-fairway-200/70">
         <h2 className="text-[15px] font-bold">Demo accounts</h2>
-        <p className="mt-1 text-[13px] text-fairway-100/70">Jump straight into a golf day that is already in play.</p>
+        <p className="mt-1 text-[13px] hero-muted">Jump straight into a golf day that is already in play.</p>
         <div className="mt-4 space-y-2">
-          <button onClick={() => demo("admin@golfday.app")} className="w-full rounded-xl bg-white/[0.07] p-3 text-left ring-1 ring-inset ring-white/15 transition hover:bg-white/[0.12]">
+          <button onClick={() => demo("admin@golfday.app")} className="w-full rounded-xl bg-white/70 p-3 text-left ring-1 ring-inset ring-fairway-200/70 transition hover:bg-white/90">
             <div className="text-[13.5px] font-semibold">Alex Morgan</div>
-            <div className="text-[11.5px] text-fairway-100/60">Event admin · admin@golfday.app</div>
+            <div className="text-[11.5px] hero-muted">Event admin · admin@golfday.app</div>
           </button>
-          <button onClick={() => demo("sam@golfday.app")} className="w-full rounded-xl bg-white/[0.07] p-3 text-left ring-1 ring-inset ring-white/15 transition hover:bg-white/[0.12]">
+          <button onClick={() => demo("sam@golfday.app")} className="w-full rounded-xl bg-white/70 p-3 text-left ring-1 ring-inset ring-fairway-200/70 transition hover:bg-white/90">
             <div className="text-[13.5px] font-semibold">Sam Whitcombe</div>
-            <div className="text-[11.5px] text-fairway-100/60">Player · sam@golfday.app</div>
+            <div className="text-[11.5px] hero-muted">Player · sam@golfday.app</div>
           </button>
         </div>
-        <div className="mt-5 rounded-xl bg-black/20 p-3 text-[12px] leading-relaxed text-fairway-100/70">
-          Password for every demo account is <span className="font-mono text-sand-300">golfday123</span>.
+        <div className="mt-5 rounded-xl bg-white/60 p-3 text-[12px] leading-relaxed hero-muted ring-1 ring-inset ring-fairway-200/60">
+          Password for every demo account is <span className="font-mono font-semibold text-sand-700">golfday123</span>.
           The Autumn Invitational is live today with three groups on the course.
         </div>
       </div>

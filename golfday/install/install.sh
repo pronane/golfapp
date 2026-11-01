@@ -216,9 +216,10 @@ if [ "$SKIP_E2E" -eq 1 ]; then
 else
   step "8. End-to-end click-through"
   note "a real browser registering, running a golf day and scoring a card"
-  if npm run e2e; then
+  note "then a second run for a friends' day with no society and cash on the day"
+  if npm run e2e && npm run e2e:friends; then
     E2E_STATUS="passed"
-    ok "the whole journey works on this machine"
+    ok "both journeys work on this machine"
   else
     E2E_STATUS="failed"
     printf '  %sThe click-through failed.%s The app is installed and will start normally;\n' "$RED" "$OFF"

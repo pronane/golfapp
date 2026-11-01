@@ -92,7 +92,7 @@ export function SocietiesHome({ societies }: { societies: SocietySummary[] }) {
             {societies.map((society) => (
               <li key={society.id}>
                 <Link href={`/societies/${society.slug}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-ink/[0.02]">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fairway-700 text-[13px] font-bold text-white">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fairway-300 text-[13px] font-bold text-fairway-950 ring-1 ring-inset ring-fairway-400/60">
                     {society.name.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
