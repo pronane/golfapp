@@ -302,10 +302,52 @@ async function journey() {
   await sleepLong(1200);
   await demo.shot("society");
 
-  await demo.type('input[placeholder^="Search players"]', "Sam", { caption: "The roster comes from the player directory, handicaps included." });
-  await demo.clickButton("Roster", "Add", { settle: 1900, caption: "Sam is in." });
-  await demo.type('input[placeholder^="Search players"]', "Priya", { settle: 1500 });
-  await demo.clickButton("Roster", "Add", { settle: 1900, caption: "So is Priya." });
+  /**
+   * The roster search is a debounced fetch, and the first search on a cold dev
+   * server can land while the route is still compiling - in which case the list
+   * stays empty and never retries on its own. Poll for the row, and retype if
+   * the query produced nothing.
+   */
+  async function addRosterMember(name, caption) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await demo.type('input[placeholder^="Search players"]', name, {
+        settle: 1500,
+        ...(attempt === 0 && caption ? { caption } : {}),
+      });
+      for (let i = 0; i < 8; i += 1) {
+        const box = await demo.page.evaluate((firstName) => {
+          const section = [...document.querySelectorAll("section")].find((s) =>
+            s.querySelector("h2")?.textContent?.includes("Roster"),
+          );
+          const row = [...(section?.querySelectorAll("li") ?? [])].find((li) =>
+            li.textContent.trim().startsWith(firstName),
+          );
+          const button = [...(row?.querySelectorAll("button") ?? [])].find((b) => b.textContent.trim() === "Add");
+          if (!button) return null;
+          button.scrollIntoView({ block: "center" });
+          const r = button.getBoundingClientRect();
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }, name);
+        if (box) {
+          await demo.moveTo(box.x, box.y, 12);
+          await sleepLong(160);
+          await demo.page.mouse.click(box.x, box.y);
+          await sleepLong(1900);
+          return;
+        }
+        await sleepLong(300);
+      }
+    }
+    throw new Error(`roster add failed for ${name}`);
+  }
+
+  await addRosterMember("Sam", "The roster comes from the player directory, handicaps included.");
+  await addRosterMember("Priya");
+  const rosterSize = Number(
+    (await db.execute({ sql: "select count(*) as n from society_members" })).rows[0].n,
+  );
+  console.log("roster size:", rosterSize);
+  if (rosterSize < 3) throw new Error(`expected the founder plus two members, found ${rosterSize}`);
   await demo.shot("society-roster");
 
   const society = (

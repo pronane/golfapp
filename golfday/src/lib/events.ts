@@ -479,6 +479,43 @@ export async function registerPlayer(input: RegisterPlayerInput) {
   return { ok: true, playingHandicap: ph, courseHandicap: ch };
 }
 
+/**
+ * Enters a list of players in one go - the society-roster shortcut.
+ *
+ * A society's roster is the same group of people every month, so a secretary
+ * should never have to add them one at a time. Each player goes through the
+ * normal registerPlayer path (same capacity, clash and handicap rules); anyone
+ * who cannot be added is reported back instead of failing the whole request.
+ */
+export async function registerRoster(input: {
+  eventId: string;
+  playerIds: string[];
+  force?: boolean;
+}) {
+  const added: string[] = [];
+  const skipped: { playerId: string; name: string; reason: string }[] = [];
+  const event = await getEventById(input.eventId);
+  const known = new Map(
+    (
+      await db
+        .select({ id: players.id, name: players.name })
+        .from(players)
+    ).map((p) => [p.id, p.name]),
+  );
+
+  for (const playerId of [...new Set(input.playerIds)]) {
+    try {
+      await registerPlayer({ eventId: input.eventId, playerId, force: input.force, selfEntry: false });
+      added.push(playerId);
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      skipped.push({ playerId, name: known.get(playerId) ?? playerId, reason: error.code });
+    }
+  }
+  if (event && added.length) await bumpRevision(input.eventId);
+  return { added, skipped };
+}
+
 /** Recalculate every playing handicap (e.g. after a handicap or allowance change). */
 export async function recalculateHandicaps(eventId: string) {
   const event = await getEventById(eventId);

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getEventAccess } from "@/lib/http";
 import { getEventBundle } from "@/lib/events";
 import { EventConsole } from "@/components/EventConsole";
+import { getSocietyRosterForEvent } from "@/lib/societies";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function AdminEventPage({ params }: { params: Promise<{ id:
   const access = await getEventAccess(id, user);
   const bundle = await getEventBundle(id);
   if (!bundle) notFound();
+  const roster = await getSocietyRosterForEvent(id);
   if (!access) {
     return (
       <div className="card card-pad mx-auto max-w-lg text-center">
@@ -27,6 +29,17 @@ export default async function AdminEventPage({ params }: { params: Promise<{ id:
   return (
     <EventConsole
       isOwner={access.role === "OWNER" || access.role === "SITE_ADMIN"}
+      society={
+        roster
+          ? {
+              name: roster.society.name,
+              slug: roster.society.slug,
+              joinCode: roster.society.joinCode,
+              rosterSize: roster.members.length,
+              missing: roster.missing.map((m) => ({ playerId: m.playerId, name: m.name })),
+            }
+          : null
+      }
       event={{
         id: bundle.event.id,
         slug: bundle.event.slug,

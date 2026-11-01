@@ -2,7 +2,7 @@
 
 | File | Length | What it shows |
 | --- | --- | --- |
-| [`golfday-start-to-finish.webm`](golfday-start-to-finish.webm) | 3:12 | **The whole process, one sitting, nothing faked.** An organiser starts a **society**, takes members from the player directory, opens an **order-of-merit season**, then builds a golf day from the club page: a three-step wizard, **Texas scramble** format, a card snapshotted from the course library, a field of eight, two four-balls allocated in one click, a £25 entry fee and a signed-up fixture. A player then opens **their team's** card, records the drive and the score for four holes, the public board updates live, the desk marks a cash entry paid and issues a **part-refund against that entry**, and the season's order of merit fills in. It ends on the **TV board** |
+| [`golfday-start-to-finish.webm`](golfday-start-to-finish.webm) | 3:47 | **The whole process, one sitting, nothing faked.** An organiser starts a **society**, takes members from the player directory, opens an **order-of-merit season**, then builds a golf day from the club page: a three-step wizard, **Texas scramble** format, a card snapshotted from the course library, a field of eight, two four-balls allocated in one click, a £25 entry fee and a signed-up fixture. A player then opens **their team's** card, records the drive and the score for four holes, the public board updates live, the desk marks a cash entry paid and issues a **part-refund against that entry**, and the season's order of merit fills in. It ends on the **TV board** |
 | [`golfday-product-tour.webm`](golfday-product-tour.webm) | 1:25 | The whole product: landing page and live leaderboard, sign in, player dashboard, the organiser console (field, groups, card, admins), the course library, the three-step "create a golf day" wizard, and a player signing up with their Golf England ID |
 | [`golfday-live-scoring.webm`](golfday-live-scoring.webm) | 0:49 | Two screens side by side: a four-ball entering scores on a phone and the clubhouse leaderboard updating live, including a correction |
 
@@ -83,15 +83,21 @@ Full script with timings: [`narration-script-journey.md`](narration-script-journ
 | At | Clip | Spoken |
 | --- | --- | --- |
 | 0:03 | j1 | This is one society golf day, start to finish. Alex runs the club's golf days. First, the society itself: a roster, a fixture list and a season in one place. A six-character code lets members join themselves, and handicaps come straight from the player directory. Sam and Priya are on the roster in two clicks. |
-| 0:30 | j2 | Then a season: the order of merit that runs across the year. It has a window, so only golf days played inside it score. A win is a hundred points, second ninety, and so on down the field. |
-| 0:45 | j3 | Now the golf day, created from the club page so it lands on the fixture list by itself. Format: Texas scramble, where the card belongs to the team, not the player. The course and its card come from the library, and are snapshotted onto the day. |
-| 1:08 | j4 | The field is picked from the directory, handicaps included. One click allocates two four-balls, ten minutes apart, and each team gets its own private scorecard link. No logins on the course. |
-| 1:33 | j5 | Twenty-five pounds a head. Card payments run through Stripe; cash is marked by hand. Open the day, and scoring goes live. |
-| 1:45 | j6 | The scramble is added to the season. Now, a player's phone: Sam, in Group One, opens the team card. One score per hole, and whose drive the team used, which has to be tracked, not remembered. |
-| 2:09 | j7 | Tee shot, then score. The captain taps the player whose drive they took, then the number of shots. The ledger counts them, and says who still owes one. Four holes in, and the team is top of the board. |
-| 2:31 | j8 | The public board, where the team is the competitor, with a scramble team handicap. Another team starts carding, and this page updates itself, in place, with no refresh. |
-| 2:49 | j9 | At the desk: who has paid, and a real refund. A card entry goes back through Stripe against the original payment, part or all, checked against what is left. |
-| 3:01 | j10 | And the order of merit, built from the day itself: every team member earns the team's result. That is one golf day, start to finish. |
+| 0:34 | j2 | Then a season: the order of merit that runs across the year. It has a window, so only golf days played inside it score. A win is a hundred points, second ninety, and so on down the field. |
+| 0:47 | j3 | Now the golf day, created from the club page so it lands on the fixture list by itself. Format: Texas scramble, where the card belongs to the team, not the player. The course and its card come from the library, and are snapshotted onto the day. |
+| 1:03 | j13 | Step two: the course. Par and stroke index for all eighteen holes come with it, and the card is copied onto the day, so later edits cannot rewrite a round already played. |
+| 1:15 | j4 | The field is picked from the directory, handicaps included. |
+| 1:28 | j15 | Players come from the directory, or from the society roster in one click, so the regulars are entered without typing a name. |
+| 1:36 | j11 | Two four-balls, ten minutes apart, in one click. Each team gets its own private scorecard link. |
+| 1:45 | j5 | Twenty-five pounds a head. Card payments go through Stripe when the club switches it on; today the desk takes cash. Open the day, and scoring goes live. |
+| 1:57 | j6 | The scramble is added to the season, so it counts towards the order of merit. Then a player's phone: the day as the field sees it, and then their own team card. One score per hole, and whose drive the team used, which has to be tracked, not remembered. |
+| 2:21 | j7 | Tee shot, then score. The captain taps the player whose drive they took, then the number of shots. The ledger counts them, and says who still owes one. Four holes in, and the team is top of the board. |
+| 2:36 | j12 | Every player's tee shot has to be used, so the ledger on the right counts them. A bogey on the third, a par on the fourth, and the card keeps filling in. |
+| 2:47 | j16 | Four holes in, and the team is top of the board, with every drive logged against the hole it was used on. |
+| 3:01 | j8 | The public board, where the team is the competitor, with a scramble team handicap. Another team starts carding, and this page updates itself, in place, with no refresh. |
+| 3:13 | j9 | At the desk: who has paid, and a part refund against that entry. Part or all of it, never more than was paid. |
+| 3:22 | j14 | The ledger keeps the bookkeeping honest: what was paid, what came back, and what is still refundable on each entry. |
+| 3:37 | j10 | And the order of merit, built from the day itself: every team member earns the team's result. That is one golf day, start to finish. |
 
 ### `golfday-product-tour.webm`
 

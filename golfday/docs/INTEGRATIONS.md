@@ -53,7 +53,31 @@ unique 1-18; the editor flags duplicates. The card is validated server-side
 
 1. **WHS Centralised Handicap Database (CDH)** - the standard CDH web-service interface
    that clubs' handicap software uses to read/write handicap records. Access is granted by
-   the national authority (England Golf) to clubs/software providers, and is keyed.
+   the national authority (England Golf) to clubs/software providers, and is keyed. In the
+   UK and Ireland it is DotGolf's WHS platform, with an **ISV API** at
+   <https://isvapi.whsplatform.englandgolf.org/> (Swagger) and per-club credentials
+   (username + secret key, JWT bearer auth). The country is part of the path:
+
+   | Nation | Union | Country code |
+   | --- | --- | --- |
+   | England | England Golf | `eng` |
+   | Scotland | Scottish Golf | `sco` |
+   | Wales | Wales Golf | `wal` |
+   | Ireland | Golf Ireland | `irl` |
+
+   The endpoints that matter here:
+
+   * `GET /api/{country}/v1/club/members/{memberUID}/handicap` - a member's current index
+   * `GET /api/{country}/v1/club/visitors/{memberUID}` - a **visitor's** index, which is the
+     useful one for a society playing away from its home club
+   * `POST /api/{country}/v1/scores` + `POST /api/{country}/v1/scorebatches` - returning
+     the day's scores to the player's record
+
+   There is no public open API and no published per-lookup price list: a club that is
+   already on the platform can usually have credentials issued, and anything that looks up
+   *other* clubs' members needs a partner arrangement with the union. Outside the UK/Ireland
+   the equivalents are GHIN (USGA, US), Golf Canada and Golf Australia's Golf Link - all
+   club/association credentialed in the same way.
 2. **Club handicap software exports** - every club system (ClubV1 / HowDidiDo, IG,
    HandicapMaster, Golf Genius) can export the handicap list as CSV/XLSX.
 3. **iGolf** (for players without a club) - handicap lookup in the England Golf app, again
@@ -72,7 +96,17 @@ CDH_API_KEY="<key>"
 `lookupByGolfEnglandId(id)` calls `GET {CDH_API_BASE}/golfers/{id}`, expects
 `{ name, handicapIndex, homeClub, country, gender, updatedAt }`, and normalises it. Point
 `CDH_API_BASE` at whatever your club's provider exposes (or at a small proxy you control
-that speaks your provider's SOAP/REST dialect) and nothing else in the app changes.
+that speaks your provider's SOAP/REST dialect) and nothing else in the app changes. With
+the DotGolf platform that base is `https://isvapi.whsplatform.englandgolf.org/api/eng/v1`
+and the key is the club's client token; the proxy is where you would map
+`/golfers/{id}` onto `/club/visitors/{id}`. If the mode is `cdh` but the base or key is
+missing, lookup fails loudly with `integration_not_configured` rather than quietly falling
+back to demo data.
+
+**Giving the choice to the organiser:** today the source is an app-wide env var. Making it
+per-society (society A uses the club's CDH key, society B types handicaps in) is a column
+on `societies` read by the same resolver - one function, so the app-side work is small; the
+credential and the contract are the real cost.
 
 ### b) CSV import (works today, no keys)
 
