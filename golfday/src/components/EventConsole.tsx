@@ -160,20 +160,20 @@ export function EventConsole(props: Props) {
   return (
     <div className="space-y-5">
       <header className="card overflow-hidden">
-        <div className="flex flex-wrap items-start justify-between gap-3 bg-fairway-950 px-5 py-5 text-white">
+        <div className="hero flex flex-wrap items-start justify-between gap-3 px-5 py-5">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className={`pill ${STATUS_STYLE[props.event.status]}`}>{STATUS_LABEL[props.event.status]}</span>
-              <span className="pill bg-white/10 text-white/75 ring-white/15">{props.registrations.length} entered</span>
-              <span className="pill bg-white/10 text-white/75 ring-white/15">{props.groups.length} groups</span>
+              <span className="pill hero-chip">{props.registrations.length} entered</span>
+              <span className="pill hero-chip">{props.groups.length} groups</span>
             </div>
             <h1 className="mt-2 text-2xl font-extrabold tracking-tight">{props.event.name}</h1>
-            <p className="text-[13px] text-fairway-100/65">
+            <p className="text-[13px] hero-muted">
               {props.event.courseName ?? "Course TBC"} · {props.event.date} · first tee {props.event.startTime}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href={`/events/${props.event.slug}`} className="btn bg-white/10 btn-sm text-white ring-1 ring-inset ring-white/20 hover:bg-white/15">Event page</Link>
+            <Link href={`/events/${props.event.slug}`} className="btn-secondary btn-sm">Event page</Link>
             <Link href={`/live/${props.event.slug}`} className="btn-sand btn-sm">Live board</Link>
           </div>
         </div>
@@ -182,7 +182,7 @@ export function EventConsole(props: Props) {
             <button
               key={item.id}
               onClick={() => setTab(item.id)}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition ${tab === item.id ? "bg-fairway-700 text-white" : "text-ink/60 hover:bg-ink/[0.05]"}`}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition ${tab === item.id ? "bg-fairway-300 text-fairway-950 ring-1 ring-inset ring-fairway-400/70" : "text-ink/60 hover:bg-ink/[0.05]"}`}
             >
               {item.label}
             </button>
@@ -275,7 +275,7 @@ export function EventConsole(props: Props) {
                 {(["OPEN", "IN_PROGRESS", "COMPLETED", "DRAFT"] as const).map((status) => (
                   <button
                     key={status}
-                    className={`rounded-xl px-3 py-2 text-[12.5px] font-semibold transition ${props.event.status === status ? "bg-fairway-700 text-white" : "bg-ink/[0.04] text-ink/60 hover:bg-ink/[0.07]"}`}
+                    className={`rounded-xl px-3 py-2 text-[12.5px] font-semibold transition ${props.event.status === status ? "bg-fairway-300 text-fairway-950 ring-1 ring-inset ring-fairway-400/70" : "bg-ink/[0.04] text-ink/60 hover:bg-ink/[0.07]"}`}
                     disabled={busy}
                     onClick={async () => {
                       const ok = await call(`/api/events/${props.event.id}`, "PATCH", { status });

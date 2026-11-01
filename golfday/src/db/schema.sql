@@ -174,6 +174,9 @@ CREATE TABLE IF NOT EXISTS event_settings (
   team_names TEXT NOT NULL DEFAULT '["Team A","Team B"]',
   matches TEXT NOT NULL DEFAULT '[]',
   entry_fee_pence INTEGER NOT NULL DEFAULT 0,
+  -- CASH | STRIPE: how an entry fee is collected. Cash is the default, because
+  -- most golf days are settled on the day.
+  payment_mode TEXT NOT NULL DEFAULT 'CASH',
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
 

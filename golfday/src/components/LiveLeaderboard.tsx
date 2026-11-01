@@ -37,24 +37,24 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
 
   return (
     <div className="space-y-4">
-      <header className="overflow-hidden rounded-2xl bg-fairway-950 text-white shadow-card">
+      <header className="hero overflow-hidden rounded-2xl shadow-card ring-1 ring-inset ring-fairway-200/70">
         <div className="px-5 py-5 sm:px-7 sm:py-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fairway-100/60">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fairway-700/70">
                 {data.event.status === "IN_PROGRESS" ? (<><LiveDot /> Live leaderboard</>) : data.event.status === "COMPLETED" ? "Final result" : "Leaderboard"}
               </div>
               <h1 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">{data.event.name}</h1>
-              <p className="mt-1 text-[13px] text-fairway-100/70">
+              <p className="mt-1 text-[13px] hero-muted">
                 {data.event.courseName ?? "Course TBC"} · {formatEventDate(data.event.date)} · {data.event.startTime}
               </p>
             </div>
             <div className="flex flex-col items-end gap-1.5">
-              <span className={`pill ${status === "live" ? "bg-emerald-400/15 text-emerald-200 ring-emerald-400/30" : status === "connecting" ? "bg-white/10 text-white/70 ring-white/15" : "bg-amber-400/15 text-amber-200 ring-amber-400/30"}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${status === "live" ? "bg-emerald-400" : status === "offline" ? "bg-amber-400" : "bg-white/50"}`} />
+              <span className={`pill ${status === "live" ? "bg-emerald-100 text-emerald-800 ring-emerald-300" : status === "connecting" ? "bg-white/70 text-fairway-800 ring-fairway-200" : "bg-amber-100 text-amber-800 ring-amber-300"}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${status === "live" ? "bg-emerald-500" : status === "offline" ? "bg-amber-500" : "bg-fairway-400"}`} />
                 {status === "live" ? "Live" : status === "connecting" ? "Connecting" : "Reconnecting"}
               </span>
-              <span className="text-[11.5px] text-fairway-100/50">updated {relative(lastUpdate)}</span>
+              <span className="text-[11.5px] hero-muted">updated {relative(lastUpdate)}</span>
             </div>
           </div>
 
@@ -65,13 +65,13 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
             <HeaderStat label="Allowance" value={`${data.event.handicapAllowance}%`} />
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 border-t border-white/10 bg-white/[0.04] px-5 py-2.5 text-[12px] text-fairway-100/70 sm:px-7">
+        <div className="flex flex-wrap items-center gap-3 border-t border-fairway-200/60 bg-white/40 px-5 py-2.5 text-[12px] hero-muted sm:px-7">
           <span>Par {data.par}</span>
-          <span className="text-white/20">|</span>
+          <span className="text-fairway-800/25">|</span>
           <span>{data.holes.length} holes</span>
-          <span className="text-white/20">|</span>
+          <span className="text-fairway-800/25">|</span>
           <span>{data.stats.leader ? `Leader: ${data.stats.leader}` : "Awaiting first card"}</span>
-          <button onClick={() => setShowCards((v) => !v)} className="ml-auto rounded-lg bg-white/10 px-2.5 py-1 text-[11.5px] font-semibold text-white/80 hover:bg-white/15">
+          <button onClick={() => setShowCards((v) => !v)} className="ml-auto rounded-lg bg-white/70 px-2.5 py-1 text-[11.5px] font-semibold text-fairway-900 ring-1 ring-inset ring-fairway-200 hover:bg-white">
             {showCards ? "Hide cards" : "Show hole-by-hole"}
           </button>
         </div>
@@ -278,8 +278,8 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
 
 function HeaderStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-white/[0.06] px-3 py-2 ring-1 ring-inset ring-white/10">
-      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-100/50">{label}</div>
+    <div className="rounded-xl bg-white/60 px-3 py-2 ring-1 ring-inset ring-fairway-200/70">
+      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-700/60">{label}</div>
       <div className="text-[17px] font-extrabold leading-tight">{value}</div>
     </div>
   );
@@ -343,26 +343,26 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-fairway-950 text-white">
-      <header className="flex items-center justify-between gap-6 border-b border-white/10 px-8 py-5">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#fbfaf5] text-ink">
+      <header className="flex items-center justify-between gap-6 border-b border-fairway-200/70 bg-white/60 px-8 py-5">
         <div>
-          <div className="flex items-center gap-2 text-[14px] font-semibold uppercase tracking-[0.16em] text-fairway-100/70">
+          <div className="flex items-center gap-2 text-[14px] font-semibold uppercase tracking-[0.16em] text-fairway-700/70">
             {data.event.status === "IN_PROGRESS" && live ? (<><LiveDot /> Live</>) : data.event.status === "COMPLETED" ? "Final result" : "Leaderboard"}
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight">{data.event.name}</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight text-fairway-950">{data.event.name}</h1>
         </div>
         <div className="text-right">
-          <div className="font-mono text-4xl font-extrabold">{clock}</div>
-          <div className="text-[15px] text-fairway-100/70">
+          <div className="font-mono text-4xl font-extrabold text-fairway-900">{clock}</div>
+          <div className="text-[15px] text-fairway-800/70">
             {data.event.courseName ?? ""} · {scramble ? "Texas scramble" : isStableford ? "Stableford" : "Net stroke play"}
           </div>
         </div>
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-[1.6fr_1fr] gap-6 px-8 py-6">
-        <div ref={scroller} className="min-h-0 overflow-hidden rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/10">
+        <div ref={scroller} className="min-h-0 overflow-hidden rounded-2xl bg-white/70 ring-1 ring-inset ring-fairway-200/70">
           <table className="w-full text-left">
-            <thead className="sticky top-0 bg-fairway-950/95 text-[14px] uppercase tracking-wide text-white/60">
+            <thead className="sticky top-0 bg-fairway-100/95 text-[14px] uppercase tracking-wide text-fairway-800/60">
               <tr>
                 <th className="w-20 px-5 py-3">Pos</th>
                 <th className="py-3">{scramble ? "Team" : "Player"}</th>
@@ -372,16 +372,16 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
             </thead>
             <tbody>
               {rows.map((s) => (
-                <tr key={s.key} className={`border-t border-white/[0.06] ${changed.includes(s.key) ? "score-flash" : ""}`}>
-                  <td className="px-5 py-3 font-mono text-2xl font-bold text-white/70">
+                <tr key={s.key} className={`border-t border-fairway-100 ${changed.includes(s.key) ? "score-flash" : ""}`}>
+                  <td className="px-5 py-3 font-mono text-2xl font-bold text-fairway-800/70">
                     {s.thru === 0 ? "–" : s.tied ? `T${s.position}` : s.position}
                   </td>
                   <td className="py-3">
-                    <div className="text-2xl font-bold">{s.name}</div>
-                    <div className="text-[14px] text-white/60">{s.sub}</div>
+                    <div className="text-2xl font-bold text-fairway-950">{s.name}</div>
+                    <div className="text-[14px] text-fairway-800/60">{s.sub}</div>
                   </td>
                   <td className="py-3 text-center font-mono text-2xl">{s.thru === 0 ? "–" : s.thru === data.holes.length ? "F" : s.thru}</td>
-                  <td className="py-3 pr-5 text-right font-mono text-3xl font-extrabold">
+                  <td className="py-3 pr-5 text-right font-mono text-3xl font-extrabold text-fairway-900">
                     {s.thru === 0 ? "–" : isStableford ? s.points : formatToPar(s.netToPar)}
                   </td>
                 </tr>
@@ -392,12 +392,12 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
         <div className="min-h-0 space-y-4 overflow-hidden">
           <GamesPanels games={data.games} tv />
           {!data.games?.matchPlay && (
-            <section className="rounded-2xl bg-white/[0.06] p-5 ring-1 ring-inset ring-white/10">
+            <section className="rounded-2xl bg-white/70 p-5 ring-1 ring-inset ring-fairway-200/70">
               <h2 className="text-[15px] font-bold">Group sweep</h2>
               <ol className="mt-3 space-y-1.5">
                 {[...data.groups].sort((a, b) => b.points - a.points).slice(0, 5).map((g, i) => (
-                  <li key={g.id} className="flex items-center justify-between rounded-xl bg-white/[0.05] px-3 py-2 text-[15px]">
-                    <span><span className="mr-2 font-mono text-white/60">{i + 1}</span>{g.name}</span>
+                  <li key={g.id} className="flex items-center justify-between rounded-xl bg-fairway-50 px-3 py-2 text-[15px]">
+                    <span><span className="mr-2 font-mono text-fairway-800/60">{i + 1}</span>{g.name}</span>
                     <span className="font-mono font-extrabold">{g.points}</span>
                   </li>
                 ))}
@@ -407,7 +407,7 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
         </div>
       </div>
 
-      <footer className="border-t border-white/10 px-8 py-4">
+      <footer className="border-t border-fairway-200/70 px-8 py-4">
         <SponsorStrip games={data.games} tv />
       </footer>
     </div>

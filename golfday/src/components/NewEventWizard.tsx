@@ -32,11 +32,22 @@ const todayPlus = (days: number) => {
   return date.toISOString().slice(0, 10);
 };
 
-export function NewEventWizard({ societyId = null }: { societyId?: string | null }) {
+type SocietyOption = { id: string; name: string };
+
+export function NewEventWizard({
+  societyId = null,
+  societies = [],
+}: {
+  societyId?: string | null;
+  /** Societies this person runs - offered as an optional home for the day. */
+  societies?: SocietyOption[];
+}) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // "Just my friends and me" is the default: no society, nothing to join.
+  const [hostedBy, setHostedBy] = useState<string>(societyId ?? "friends");
 
   const [form, setForm] = useState({
     name: "",
@@ -167,7 +178,7 @@ export function NewEventWizard({ societyId = null }: { societyId?: string | null
           maxPlayers: Number(form.maxPlayers),
           isPublic: form.isPublic,
           status: form.status,
-          ...(societyId ? { societyId } : {}),
+          ...(hostedBy !== "friends" ? { societyId: hostedBy } : {}),
         }),
       });
       const data = await res.json();
@@ -194,7 +205,7 @@ export function NewEventWizard({ societyId = null }: { societyId?: string | null
       <ol className="flex items-center gap-3 text-[12.5px] font-semibold">
         {[{ n: 1, label: "The golf day" }, { n: 2, label: "The course" }, { n: 3, label: "Review" }].map((s) => (
           <li key={s.n} className="flex items-center gap-2">
-            <span className={`grid h-6 w-6 place-items-center rounded-full ${step >= s.n ? "bg-fairway-700 text-white" : "bg-ink/[0.07] text-ink/40"}`}>{s.n}</span>
+            <span className={`grid h-6 w-6 place-items-center rounded-full ${step >= s.n ? "bg-fairway-300 text-fairway-950 ring-1 ring-inset ring-fairway-400/70" : "bg-ink/[0.07] text-ink/40"}`}>{s.n}</span>
             <span className={step >= s.n ? "text-ink" : "text-ink/40"}>{s.label}</span>
             {s.n < 3 && <span className="mx-1 h-px w-8 bg-ink/10" />}
           </li>
@@ -203,6 +214,34 @@ export function NewEventWizard({ societyId = null }: { societyId?: string | null
 
       {step === 1 && (
         <section className="card card-pad space-y-4">
+          <div>
+            <div className="label">Who is this day for?</div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[
+                { value: "friends", label: "Me and my friends", blurb: "No society, no roster. Just the field you add below." },
+                ...societies.map((s) => ({ value: s.id, label: s.name, blurb: "Lands on that society's fixture list and can use its handicap settings." })),
+              ].map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex cursor-pointer items-start gap-2 rounded-xl border p-2.5 text-[12.5px] ${
+                    hostedBy === option.value ? "border-fairway-300 bg-fairway-50/70" : "border-ink/10 hover:bg-ink/[0.02]"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="hosted-by"
+                    className="mt-0.5"
+                    checked={hostedBy === option.value}
+                    onChange={() => setHostedBy(option.value)}
+                  />
+                  <span>
+                    <span className="block font-semibold">{option.label}</span>
+                    <span className="block text-[11px] text-ink/50">{option.blurb}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
           <div>
             <label className="label" htmlFor="name">Event name</label>
             <input id="name" className="input" value={form.name} placeholder="Autumn Invitational" onChange={(e) => set("name", e.target.value)} />
@@ -266,7 +305,7 @@ export function NewEventWizard({ societyId = null }: { societyId?: string | null
               <button
                 key={tab.id}
                 onClick={() => setMode(tab.id)}
-                className={`rounded-xl px-3 py-2 text-[13px] font-semibold transition ${mode === tab.id ? "bg-fairway-700 text-white" : "bg-ink/[0.04] text-ink/60 hover:bg-ink/[0.07]"}`}
+                className={`rounded-xl px-3 py-2 text-[13px] font-semibold transition ${mode === tab.id ? "bg-fairway-300 text-fairway-950 ring-1 ring-inset ring-fairway-400/70" : "bg-ink/[0.04] text-ink/60 hover:bg-ink/[0.07]"}`}
               >
                 {tab.label}
               </button>
@@ -316,7 +355,13 @@ export function NewEventWizard({ societyId = null }: { societyId?: string | null
                     </button>
                   ))}
                 {!searching && saved.length === 0 && provider.length === 0 && (
-                  <p className="col-span-2 py-4 text-center text-[13px] text-ink/45">No courses match. Try “Type a new course”.</p>
+                  <div className="col-span-2 rounded-xl bg-sand-50 p-4 text-center ring-1 ring-inset ring-sand-200">
+                    <p className="text-[13px] font-semibold text-sand-700">That course isn&apos;t in the list.</p>
+                    <p className="mt-1 text-[12.5px] text-ink/60">No problem - you can type the card in yourself. Par and stroke index per hole is all it needs.</p>
+                    <button className="btn-secondary btn-sm mt-2.5" onClick={() => setMode("manual")}>
+                      Type the card in
+                    </button>
+                  </div>
                 )}
               </div>
               {(selectedId ?? pendingProvider) && (
@@ -330,6 +375,11 @@ export function NewEventWizard({ societyId = null }: { societyId?: string | null
 
           {mode === "manual" && (
             <div className="space-y-4">
+              <p className="rounded-xl bg-fairway-50 px-3 py-2 text-[12.5px] text-fairway-900 ring-1 ring-inset ring-fairway-200">
+                Not on any list? Type it in once and it is saved to your course library for next time. Slope and rating
+                are on the card at the club; if you don&apos;t have them, the defaults (113 / 72) work fine for a
+                friendly game.
+              </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label" htmlFor="cname">Course name</label>

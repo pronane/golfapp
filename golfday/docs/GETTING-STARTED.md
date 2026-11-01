@@ -12,6 +12,29 @@ that. Everything you type is saved as you go, so you can stop and come back.
 
 ---
 
+## Two ways to use it - pick the one that sounds like you
+
+GolfDay does two jobs, and you do not have to set up the club-sized one to get the small one:
+
+| | **Just you and your friends** | **A club or a society** |
+| --- | --- | --- |
+| What you make | A golf day. Nothing else. | A society, then golf days on its fixture list |
+| Who is in it | Whoever you add - three mates and you is fine | A roster, a join code, roles for the committee |
+| Handicaps | Type them in, or **no handicap at all** | WHS / iGolf / GHIN / society handicaps, looked up |
+| Money | **Cash on the day** - you just tick people off | Cash, or card payments with refunds |
+| Set-up time | About five minutes | Twenty minutes, once a season |
+
+On the home page that is the **"One day, a few friends"** card; the club path is the
+**"A whole season"** card beside it. Both end up in the same place - a field, tee groups,
+a scorecard link each and a live leaderboard.
+
+**The short version for friends:** sign up → **Set up a golf day** → leave *Who is this day
+for?* on **Me and my friends** → name it, pick or type the course → add the players by hand →
+auto-allocate groups → share the scorecard link. Skip sections 1, 2 and 3 below; everything
+you need is in sections 4 to 7.
+
+---
+
 ## Before you start
 
 Have these to hand:
@@ -27,6 +50,8 @@ Have these to hand:
 ---
 
 ## 1. Sign in and make the society
+
+*(Club and society path. For a day with friends, skip to section 4.)*
 
 ![The signed-in home page](screenshots/journey/02-signed-in.jpg)
 
@@ -104,18 +129,22 @@ can add a season later and attach past results.
 
 ## 4. Create the golf day
 
+*(This is where a friends' day starts too.)*
+
 ![The wizard](screenshots/journey/08-wizard-format.jpg)
 
 **Admin → Create a golf day** is a three-step wizard:
 
-1. **The basics** - name, date, a one-line description, the format (Stableford, net
-   stroke play, or Texas scramble), the handicap allowance (95% is common for singles
-   matchplay-style days, 100% for a straightforward Stableford), and whether it belongs
-   to a society.
+1. **The basics** - who the day is for (**Me and my friends**, the default, or one of the
+   societies you run), a name, the date, a one-line description, the format (Stableford,
+   net stroke play, or Texas scramble) and the handicap allowance (95% is common for
+   singles matchplay-style days, 100% for a straightforward Stableford).
 2. **The course** - search the course library by club or town and pick a card. It copies
    par, stroke index and the tee ratings, so playing handicaps are worked out properly.
-   No card? Create the event with a placeholder and add the card from the organiser
-   console when you have it.
+   **If your course is not in the list** - a pitch and putt, a municipal, a nine-holer, a
+   course abroad - press **Type a new course** and fill in par and stroke index per hole. It
+   is saved to your library, so next time it is one click. No card at all? **Decide later**
+   creates the day now and you can add the card from the console.
 3. **Review** - check the date, card and format, then create it.
 
 ![Reviewing the event](screenshots/journey/09-wizard-review.jpg)
@@ -135,7 +164,8 @@ entry list:
   are not re-typing the members every month.
 * **Add a player** - anyone with a GolfDay account, by name.
 * **New guest player** - someone without an account, or a visitor. Pick where their
-  handicap comes from; "No handicap yet" plays them off scratch.
+  handicap comes from; "No handicap yet" plays them off scratch. This is how most
+  friends' days fill up: three names, three clicks, no invitations to send.
 * **Import a CSV** - a one-off list from a spreadsheet.
 
 Each entry keeps a snapshot of the handicap on the day, which is what makes a played
@@ -154,9 +184,16 @@ scramble, the team is the unit, and each team gets its own shareable scorecard l
 
 ![Entry fee](screenshots/journey/14-entry-fee.jpg)
 
-If the day has an entry fee, set it on the event. Players pay by card from their entry
-page; you see who has paid, and you can refund an entry from the console without leaving
-the app. Leave the fee blank for a roll-up - no payment screens appear at all.
+Leave the fee blank for a roll-up and no money screens appear at all. If you *are*
+charging, there are two ways, and **cash is the default**:
+
+* **Cash or bank transfer** - players are told to bring it on the day and see no card
+  button. In the **Payments** tab you tick people off as they pay you: *Mark paid*. That
+  is the whole cash book, and it needs nothing set up.
+* **Card online (Stripe)** - choose it explicitly in **Games → Entry fee**. Players then get
+  a *Pay entry* button, and you can refund from the console. It only works if the server
+  has Stripe keys; without them the app falls back to telling players to pay you on the
+  day rather than failing.
 
 ---
 
@@ -219,6 +256,8 @@ Next month you repeat from step 4: the society, roster and handicap settings sta
 | A player is not on the roster | Use **New guest player** on the field; they can claim the record later |
 | The join code went to the wrong group | The join code can be re-shared or rotated on the society page |
 | A completed event needs a correction | A site admin can reopen it; the change is recorded against the event |
+| You clicked "card online" by mistake | Games → Entry fee → choose **Cash or bank transfer**. Anyone already charged can be refunded in Payments |
+| The course is a nine-holer or a pitch and putt | Type the card in; nine holes is fine, the maths handles it |
 
 ---
 

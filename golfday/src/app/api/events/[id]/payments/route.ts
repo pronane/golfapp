@@ -53,6 +53,7 @@ export const GET = route(async (_request: Request, ctx: Ctx) => {
     .reduce((sum, r) => sum + r.amountPence - r.refundedPence, 0);
   return json({
     feePence: settings.entryFeePence,
+    paymentMode: settings.paymentMode,
     stripeEnabled: stripeEnabled(),
     collectedPence: collected,
     refundedPence: refunded,

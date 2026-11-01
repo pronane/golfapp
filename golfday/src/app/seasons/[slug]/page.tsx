@@ -33,13 +33,13 @@ export default async function SeasonPage({ params }: { params: Promise<{ slug: s
 
   return (
     <div className="space-y-5">
-      <header className="overflow-hidden rounded-2xl bg-fairway-950 text-white shadow-card">
+      <header className="hero overflow-hidden rounded-2xl shadow-card ring-1 ring-inset ring-fairway-200/70">
         <div className="px-5 py-6 sm:px-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fairway-100/60">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] hero-muted">
                 {society ? (
-                  <Link href={`/societies/${society.slug}`} className="hover:text-white">
+                  <Link href={`/societies/${society.slug}`} className="hover:text-fairway-700">
                     {society.name}
                   </Link>
                 ) : (
@@ -48,22 +48,22 @@ export default async function SeasonPage({ params }: { params: Promise<{ slug: s
                 · Order of merit
               </div>
               <h1 className="mt-1 text-3xl font-extrabold tracking-tight">{season.name}</h1>
-              <p className="mt-1 text-[13px] text-fairway-100/70">
+              <p className="mt-1 text-[13px] hero-muted">
                 {formatEventDate(season.startsOn)} – {formatEventDate(season.endsOn)} · {fixtures.length} fixture
                 {fixtures.length === 1 ? "" : "s"} · {schemeLabel}
                 {season.bestOf > 0 ? ` · best ${season.bestOf} results count` : ""}
               </p>
             </div>
-            <div className="rounded-xl bg-white/[0.06] px-4 py-3 text-right ring-1 ring-inset ring-white/10">
-              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-100/50">Leader</div>
+            <div className="rounded-xl bg-white/60 px-4 py-3 text-right ring-1 ring-inset ring-fairway-200/70">
+              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-700/60">Leader</div>
               <div className="text-[17px] font-extrabold">{table.rows[0]?.playerName ?? "–"}</div>
-              <div className="text-[12px] text-fairway-100/60">{table.rows[0] ? `${table.rows[0].points} pts` : "No results yet"}</div>
+              <div className="text-[12px] hero-muted">{table.rows[0] ? `${table.rows[0].points} pts` : "No results yet"}</div>
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 border-t border-white/10 bg-white/[0.04] px-5 py-2.5 text-[12px] text-fairway-100/70 sm:px-7">
+        <div className="flex flex-wrap items-center gap-3 border-t border-fairway-200/60 bg-white/40 px-5 py-2.5 text-[12px] hero-muted sm:px-7">
           <span>{table.fixtures} fixture{table.fixtures === 1 ? "" : "s"} scored</span>
-          <span className="text-white/20">|</span>
+          <span className="text-fairway-800/25">|</span>
           <span>{table.rows.length} player{table.rows.length === 1 ? "" : "s"} on the table</span>
         </div>
       </header>

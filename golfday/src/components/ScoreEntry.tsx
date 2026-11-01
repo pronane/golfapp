@@ -193,25 +193,25 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
   return (
     <div className="space-y-4">
       <header className="card sticky top-0 z-20 overflow-hidden">
-        <div className="bg-fairway-950 px-5 py-3 text-white">
+        <div className="hero px-5 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fairway-100/60">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fairway-700/70">
                 <LiveDot /> Live scorecard · {card.group.name}
               </div>
               <h1 className="truncate text-lg font-extrabold leading-tight tracking-tight">{card.event.name}</h1>
-              <p className="text-[11.5px] text-fairway-100/60">
+              <p className="text-[11.5px] hero-muted">
                 {card.event.courseName} · {formatEventDate(card.event.date)} · tee {card.group.teeTime ?? "TBC"}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="pill bg-white/10 text-white/80 ring-white/15">{scored}/{totalHoles} holes in</span>
+              <span className="pill hero-chip">{scored}/{totalHoles} holes in</span>
               {pending > 0 && (
-                <span role="status" className="pill bg-amber-400/15 text-amber-100 ring-amber-400/30">
+                <span role="status" className="pill bg-amber-100 text-amber-800 ring-amber-300">
                   {pending} saved on this phone · will sync
                 </span>
               )}
-              <Link href={`/live/${card.event.slug}`} className="btn bg-white/10 btn-sm text-white ring-1 ring-inset ring-white/20 hover:bg-white/15">
+              <Link href={`/live/${card.event.slug}`} className="btn-secondary btn-sm">
                 Leaderboard
               </Link>
             </div>
@@ -227,15 +227,15 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
                 key={player.id}
                 onClick={() => setActivePlayerId(player.id)}
                 className={`flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition ${
-                  isActive ? "bg-fairway-700 text-white shadow-sm" : "bg-ink/[0.04] text-ink/70 hover:bg-ink/[0.07]"
+                  isActive ? "bg-fairway-300 text-fairway-950 shadow-sm ring-1 ring-inset ring-fairway-400/70" : "bg-ink/[0.04] text-ink/70 hover:bg-ink/[0.07]"
                 }`}
               >
-                <div className={`grid h-6 w-6 place-items-center rounded-full text-[10.5px] font-bold ${isActive ? "bg-white/15" : "bg-white"}`}>
+                <div className={`grid h-6 w-6 place-items-center rounded-full text-[10.5px] font-bold ${isActive ? "bg-white/70" : "bg-white"}`}>
                   {player.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
                 </div>
                 <div>
                   <div className="text-[13px] font-semibold leading-tight">{player.name.split(" ")[0]}</div>
-                  <div className={`text-[10.5px] leading-tight ${isActive ? "text-white/70" : "text-ink/45"}`}>
+                  <div className={`text-[10.5px] leading-tight ${isActive ? "text-fairway-800/70" : "text-ink/45"}`}>
                     {player.thru}h · {player.points} pts
                   </div>
                 </div>
@@ -264,7 +264,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
                     onClick={() => setActiveHole(h.holeNumber)}
                     className={`relative rounded-lg py-2 text-center transition ${
                       isActive
-                        ? "bg-fairway-700 text-white ring-2 ring-fairway-700"
+                        ? "bg-fairway-300 text-fairway-950 ring-2 ring-fairway-500"
                         : value
                           ? "bg-fairway-50 text-fairway-900 ring-1 ring-inset ring-fairway-100"
                           : "bg-ink/[0.03] text-ink/50 ring-1 ring-inset ring-ink/[0.06] hover:bg-ink/[0.06]"
@@ -307,7 +307,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
                       disabled={saving !== null}
                       className={`group relative rounded-xl px-1 py-3 text-center transition ${
                         selected
-                          ? "bg-fairway-700 text-white ring-2 ring-fairway-700"
+                          ? "bg-fairway-300 text-fairway-950 ring-2 ring-fairway-500"
                           : points >= 4
                             ? "bg-emerald-50 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100"
                             : points === 3
@@ -316,10 +316,10 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
                       } ${saving === hole.holeNumber ? "opacity-60" : ""}`}
                     >
                       <div className={`text-[19px] font-extrabold leading-none ${selected ? "" : "text-ink"}`}>{strokes}</div>
-                      <div className={`mt-1 text-[10px] font-semibold uppercase tracking-wide ${selected ? "text-white/70" : points >= 4 ? "text-emerald-700" : "text-ink/40"}`}>
+                      <div className={`mt-1 text-[10px] font-semibold uppercase tracking-wide ${selected ? "text-fairway-800/80" : points >= 4 ? "text-emerald-700" : "text-ink/40"}`}>
                         {name || `${strokes}`}
                       </div>
-                      <div className={`text-[10px] font-bold ${selected ? "text-sand-300" : points >= 4 ? "text-emerald-700" : "text-ink/45"}`}>
+                      <div className={`text-[10px] font-bold ${selected ? "text-sand-700" : points >= 4 ? "text-emerald-700" : "text-ink/45"}`}>
                         {points} pt{points === 1 ? "" : "s"}
                       </div>
                     </button>

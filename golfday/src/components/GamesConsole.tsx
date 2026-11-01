@@ -22,6 +22,7 @@ const EMPTY: GameSettings = {
   teamNames: ["Team A", "Team B"],
   matches: [],
   entryFeePence: 0,
+  paymentMode: "CASH",
 };
 
 /**
@@ -181,7 +182,7 @@ export function GamesConsole({ eventId, holeCount, players }: Props) {
           ] as const).map(([value, label]) => (
             <button key={value} role="radio" aria-checked={settings.teamFormat === value} disabled={busy}
               onClick={() => void save({ ...settings, teamFormat: value })}
-              className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold ring-1 ring-inset ${settings.teamFormat === value ? "bg-fairway-700 text-white ring-fairway-700" : "text-ink/70 ring-ink/15 hover:bg-ink/[0.04]"}`}>
+              className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold ring-1 ring-inset ${settings.teamFormat === value ? "bg-fairway-300 text-fairway-950 ring-fairway-400" : "text-ink/70 ring-ink/15 hover:bg-ink/[0.04]"}`}>
               {label}
             </button>
           ))}
@@ -297,7 +298,42 @@ export function GamesConsole({ eventId, holeCount, players }: Props) {
 
         <section className="card card-pad space-y-3">
           <h2 className="text-[15px] font-bold">Entry fee</h2>
-          <p className="text-[12.5px] text-ink/60">Players see a &ldquo;Pay entry&rdquo; button on the event page. Track who has paid in the Payments tab.</p>
+          <p className="text-[12.5px] text-ink/60">
+            Leave it at 0 for a roll-up. If you charge, choose how: <span className="font-medium text-ink/80">cash on the
+            day</span> (nothing to set up, you tick people off in the Payments tab) or <span className="font-medium text-ink/80">card
+            online</span> (needs Stripe keys on the server).
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {([
+              { value: "CASH" as const, label: "Cash or bank transfer", blurb: "Players bring it on the day. No fees, no setup." },
+              { value: "STRIPE" as const, label: "Card online (Stripe)", blurb: "Players pay from the event page before the day." },
+            ]).map((option) => (
+              <label
+                key={option.value}
+                className={`flex cursor-pointer items-start gap-2 rounded-xl border p-2.5 text-[12.5px] ${
+                  settings.paymentMode === option.value ? "border-fairway-300 bg-fairway-50/70" : "border-ink/10 hover:bg-ink/[0.02]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="payment-mode"
+                  className="mt-0.5"
+                  checked={settings.paymentMode === option.value}
+                  onChange={() => void save({ ...settings, paymentMode: option.value }, option.value === "CASH" ? "Cash on the day" : "Card payments on")}
+                />
+                <span>
+                  <span className="block font-semibold">{option.label}</span>
+                  <span className="block text-[11px] text-ink/50">{option.blurb}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {settings.paymentMode === "STRIPE" && settings.entryFeePence > 0 && (
+            <p className="rounded-lg bg-sand-50 px-3 py-2 text-[12px] text-sand-700 ring-1 ring-inset ring-sand-200">
+              Card payments need <span className="font-mono">STRIPE_SECRET_KEY</span> set on the server. Without it players
+              are told to pay you on the day, so nothing breaks - it just quietly falls back to cash.
+            </p>
+          )}
           <div className="flex items-end gap-2">
             <div className="w-36">
               <label className="label" htmlFor="g-fee">Fee (£)</label>

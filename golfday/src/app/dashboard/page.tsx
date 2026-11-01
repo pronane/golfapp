@@ -39,7 +39,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex gap-2">
           <Link href="/events" className="btn-secondary btn-sm">Find a golf day</Link>
-          <Link href="/admin/events/new" className="btn-primary btn-sm">Create one <Arrow /></Link>
+          <Link href="/admin/events/new" className="btn-primary btn-sm">Set up a golf day <Arrow /></Link>
         </div>
       </div>
 
@@ -121,8 +121,12 @@ export default async function DashboardPage() {
             </div>
             {adminEvents.length === 0 ? (
               <div className="px-5 py-8 text-center">
-                <p className="text-[13.5px] text-ink/55">You are not an admin of any event yet.</p>
-                <Link href="/admin/events/new" className="btn-primary btn-sm mt-3">Create a golf day</Link>
+                <p className="text-[13.5px] font-medium text-ink/70">Playing with friends? You don&apos;t need a society.</p>
+                <p className="mx-auto mt-1 max-w-sm text-[12.5px] leading-relaxed text-ink/55">
+                  Set up a day, add the four-ball, hand out one scorecard link. Green fees stay in cash if you like -
+                  you just tick people off as they pay you.
+                </p>
+                <Link href="/admin/events/new" className="btn-primary btn-sm mt-3">Set up a day for friends</Link>
               </div>
             ) : (
               <ul className="divide-y divide-ink/[0.06]">

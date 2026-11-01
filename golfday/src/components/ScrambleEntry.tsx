@@ -123,23 +123,23 @@ export function ScrambleEntry({ initial, initialBoard }: Props) {
   return (
     <div className="space-y-4">
       <header className="card sticky top-0 z-20 overflow-hidden">
-        <div className="bg-fairway-950 px-5 py-3 text-white">
+        <div className="hero px-5 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fairway-100/60">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fairway-700/70">
                 <LiveDot /> Texas scramble · {card.group.name}
               </div>
               <h1 className="truncate text-lg font-extrabold leading-tight tracking-tight">{card.event.name}</h1>
-              <p className="text-[11.5px] text-fairway-100/60">
+              <p className="text-[11.5px] hero-muted">
                 {card.event.courseName} · {formatEventDate(card.event.date)} · tee {card.group.teeTime ?? "TBC"} · team handicap{" "}
                 {scramble.teamHandicap}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="pill bg-white/10 text-white/80 ring-white/15">
+              <span className="pill hero-chip">
                 {scoredHoles}/{scramble.holes.length} holes in
               </span>
-              <Link href={`/live/${card.event.slug}`} className="btn btn-sm bg-white/10 text-white ring-1 ring-inset ring-white/20 hover:bg-white/15">
+              <Link href={`/live/${card.event.slug}`} className="btn-secondary btn-sm">
                 Leaderboard
               </Link>
             </div>
@@ -175,7 +175,7 @@ export function ScrambleEntry({ initial, initialBoard }: Props) {
                     }}
                     className={`relative rounded-lg py-2 text-center transition ${
                       isActive
-                        ? "bg-fairway-700 text-white ring-2 ring-fairway-700"
+                        ? "bg-fairway-300 text-fairway-950 ring-2 ring-fairway-500"
                         : h.strokes !== null
                           ? "bg-fairway-50 text-fairway-900 ring-1 ring-inset ring-fairway-100"
                           : "bg-ink/[0.03] text-ink/50 ring-1 ring-inset ring-ink/[0.06] hover:bg-ink/[0.06]"
@@ -216,7 +216,7 @@ export function ScrambleEntry({ initial, initialBoard }: Props) {
                       disabled={saving}
                       className={`rounded-xl px-1 py-3 text-center transition ${
                         selected
-                          ? "bg-fairway-700 text-white ring-2 ring-fairway-700"
+                          ? "bg-fairway-300 text-fairway-950 ring-2 ring-fairway-500"
                           : points >= 4
                             ? "bg-emerald-50 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100"
                             : points === 3
@@ -225,10 +225,10 @@ export function ScrambleEntry({ initial, initialBoard }: Props) {
                       } ${saving ? "opacity-60" : ""}`}
                     >
                       <div className="text-[19px] font-extrabold leading-none">{strokes}</div>
-                      <div className={`mt-1 text-[10px] font-semibold uppercase tracking-wide ${selected ? "text-white/70" : points >= 4 ? "text-emerald-700" : "text-ink/40"}`}>
+                      <div className={`mt-1 text-[10px] font-semibold uppercase tracking-wide ${selected ? "text-fairway-800/80" : points >= 4 ? "text-emerald-700" : "text-ink/40"}`}>
                         {name || `${strokes}`}
                       </div>
-                      <div className={`text-[10px] font-bold ${selected ? "text-sand-300" : points >= 4 ? "text-emerald-700" : "text-ink/45"}`}>
+                      <div className={`text-[10px] font-bold ${selected ? "text-sand-700" : points >= 4 ? "text-emerald-700" : "text-ink/45"}`}>
                         {points} pt{points === 1 ? "" : "s"}
                       </div>
                     </button>
@@ -246,7 +246,7 @@ export function ScrambleEntry({ initial, initialBoard }: Props) {
                         key={member.id}
                         onClick={() => void creditDrive(member.id)}
                         disabled={saving}
-                        className={`pill ${isDrive ? "bg-fairway-700 text-white ring-fairway-700" : "bg-ink/[0.04] text-ink/65 ring-ink/10 hover:bg-ink/[0.08]"}`}
+                        className={`pill ${isDrive ? "bg-fairway-300 text-fairway-950 ring-fairway-400" : "bg-ink/[0.04] text-ink/65 ring-ink/10 hover:bg-ink/[0.08]"}`}
                       >
                         {member.name.split(" ")[0]} · {member.drives}
                         {member.drivesNeeded > 0 && !isDrive ? <span className="ml-1 text-amber-600">({member.drivesNeeded} to go)</span> : null}

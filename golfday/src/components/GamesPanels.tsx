@@ -14,9 +14,9 @@ export function GamesPanels({ games, tv = false }: { games: GamesPayload | undef
   const { skins, pairs, sideGames, matchPlay } = games;
   if (!skins && !pairs && sideGames.length === 0 && !matchPlay) return null;
 
-  const card = tv ? "rounded-2xl bg-white/[0.06] p-5 ring-1 ring-inset ring-white/10" : "card card-pad";
-  const muted = tv ? "text-white/60" : "text-ink/60";
-  const row = tv ? "rounded-xl bg-white/[0.05] px-3 py-2" : "rounded-xl bg-ink/[0.03] px-3 py-2";
+  const card = tv ? "rounded-2xl bg-white/70 p-5 ring-1 ring-inset ring-fairway-200/70" : "card card-pad";
+  const muted = tv ? "text-fairway-800/60" : "text-ink/60";
+  const row = tv ? "rounded-xl bg-fairway-50 px-3 py-2" : "rounded-xl bg-ink/[0.03] px-3 py-2";
 
   return (
     <div className={tv ? "space-y-4" : "grid gap-4 sm:grid-cols-2"}>
@@ -42,7 +42,7 @@ export function GamesPanels({ games, tv = false }: { games: GamesPayload | undef
           <ul className="mt-3 space-y-1.5">
             {matchPlay.matches.map((m) => {
               const tone =
-                m.leading === "A" ? "text-sky-700" : m.leading === "B" ? "text-rose-700" : tv ? "text-white/80" : "text-ink/70";
+                m.leading === "A" ? "text-sky-700" : m.leading === "B" ? "text-rose-700" : tv ? "text-fairway-900" : "text-ink/70";
               return (
                 <li key={m.id} className={`grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[13px] ${row}`}>
                   <span className={`truncate text-left ${m.leading === "A" ? "font-bold" : ""}`}>{m.sideA.join(" & ")}</span>
@@ -149,9 +149,9 @@ export function SponsorStrip({ games, tv = false }: { games: GamesPayload | unde
   return (
     <aside
       aria-label="Sponsors"
-      className={`flex flex-wrap items-center justify-center gap-x-6 gap-y-2 ${tv ? "text-[18px] text-white/80" : "rounded-2xl bg-sand-50 px-4 py-3 text-[13px] text-ink/70 ring-1 ring-inset ring-sand-200"}`}
+      className={`flex flex-wrap items-center justify-center gap-x-6 gap-y-2 ${tv ? "text-[18px] text-fairway-800/80" : "rounded-2xl bg-sand-50 px-4 py-3 text-[13px] text-ink/70 ring-1 ring-inset ring-sand-200"}`}
     >
-      <span className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${tv ? "text-white/50" : "text-ink/50"}`}>With thanks to</span>
+      <span className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${tv ? "text-fairway-800/50" : "text-ink/50"}`}>With thanks to</span>
       {sponsors.map((s, i) =>
         s.url && !tv ? (
           <a key={`${s.name}-${i}`} href={s.url} target="_blank" rel="noopener noreferrer sponsored" className="font-semibold hover:underline">

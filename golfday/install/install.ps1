@@ -210,10 +210,13 @@ if ($SkipE2E) {
 } else {
   Write-Step "8. End-to-end click-through"
   Write-Note "a real browser registering, running a golf day and scoring a card"
+  Write-Note "then a second run for a friends' day with no society and cash on the day"
   & npm run e2e
-  if ($LASTEXITCODE -eq 0) {
+  $first = $LASTEXITCODE
+  if ($first -eq 0) { & npm run e2e:friends }
+  if ($first -eq 0 -and $LASTEXITCODE -eq 0) {
     $e2eStatus = "passed"
-    Write-Ok "the whole journey works on this machine"
+    Write-Ok "both journeys work on this machine"
   } else {
     $e2eStatus = "failed"
     Write-Host "  The click-through failed." -ForegroundColor Red

@@ -73,35 +73,34 @@ export default async function EventPage({
   return (
     <div className="space-y-5">
       <header className="card overflow-hidden">
-        <div className="relative bg-fairway-950 px-5 py-6 text-white sm:px-7">
-          <div className="pointer-events-none absolute inset-0 opacity-60" style={{ backgroundImage: "radial-gradient(600px 240px at 90% 0%, rgba(33,154,103,.5), transparent 65%)" }} />
+        <div className="hero relative px-5 py-6 sm:px-7">
           <div className="relative flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`pill ${STATUS_STYLE[event.status]}`}>
                   {event.status === "IN_PROGRESS" && <LiveDot />} {STATUS_LABEL[event.status]}
                 </span>
-                <span className="pill bg-white/10 text-white/80 ring-white/15">
+                <span className="pill hero-chip">
                   {event.format === "STABLEFORD" ? "Stableford" : event.format === "TEXAS_SCRAMBLE" ? "Texas scramble" : "Net stroke play"}
                 </span>
-                <span className="pill bg-white/10 text-white/80 ring-white/15">{event.handicapAllowance}% allowance</span>
+                <span className="pill hero-chip">{event.handicapAllowance}% allowance</span>
               </div>
               <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">{event.name}</h1>
-              <p className="mt-1 text-[13.5px] text-fairway-100/70">
+              <p className="mt-1 text-[13.5px] hero-muted">
                 {event.courseName ?? "Course TBC"} · {formatEventDate(event.date)} · tee off {event.startTime}
               </p>
-              {event.description && <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-fairway-100/60">{event.description}</p>}
+              {event.description && <p className="mt-2 max-w-2xl text-[13px] leading-relaxed hero-muted">{event.description}</p>}
             </div>
             <div className="flex flex-col items-stretch gap-2 sm:items-end">
               <Link href={`/live/${event.slug}`} className="btn-sand btn-sm">
                 {event.status === "IN_PROGRESS" ? "Live leaderboard" : "Leaderboard"} <Arrow />
               </Link>
               {access?.isAdmin && (
-                <Link href={`/admin/events/${event.id}`} className="btn bg-white/10 btn-sm text-white ring-1 ring-inset ring-white/20 hover:bg-white/15">
+                <Link href={`/admin/events/${event.id}`} className="btn-secondary btn-sm">
                   Organiser console
                 </Link>
               )}
-              <CopyButton value={`/live/${event.slug}`} label="Share leaderboard" className="btn bg-white/10 btn-sm text-white ring-1 ring-inset ring-white/20 hover:bg-white/15" />
+              <CopyButton value={`/live/${event.slug}`} label="Share leaderboard" className="btn-secondary btn-sm" />
             </div>
           </div>
         </div>
@@ -132,11 +131,17 @@ export default async function EventPage({
             )}
             {feePence > 0 && mine && (
               myPayment?.status === "PAID" ? (
-                <p className="mt-2 text-[12.5px] font-medium text-emerald-700">Entry fee paid · {formatPence(myPayment.amountPence)}</p>
-              ) : stripeEnabled() ? (
+                <p className="mt-2 text-[12.5px] font-medium text-emerald-700">
+                  Entry fee paid · {formatPence(myPayment.amountPence)}
+                  {myPayment.method === "MANUAL" ? " (collected by the organiser)" : ""}
+                </p>
+              ) : settings.paymentMode === "STRIPE" && stripeEnabled() ? (
                 <PayEntryButton eventId={event.id} label={`Pay entry · ${formatPence(feePence)}`} />
               ) : (
-                <p className="mt-2 text-[12.5px] text-ink/70">Entry fee {formatPence(feePence)} - pay the organiser on the day.</p>
+                <p className="mt-2 text-[12.5px] text-ink/70">
+                  Entry fee {formatPence(feePence)} - <span className="font-medium text-ink/85">pay the organiser on the
+                  day</span> (cash or bank transfer). Nothing to pay online.
+                </p>
               )
             )}
           </div>

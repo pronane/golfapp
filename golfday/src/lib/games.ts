@@ -39,7 +39,12 @@ export type GameSettings = {
   matches: MatchDefinition[];
   /** 0 = free entry */
   entryFeePence: number;
+  /** CASH: collect on the day. STRIPE: pay by card online. */
+  paymentMode: PaymentMode;
 };
+
+/** How an entry fee is collected. Cash keeps an outing a cash outing. */
+export type PaymentMode = "CASH" | "STRIPE";
 
 export const DEFAULT_SETTINGS: GameSettings = {
   skins: "OFF",
@@ -50,6 +55,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   teamNames: ["Team A", "Team B"],
   matches: [],
   entryFeePence: 0,
+  paymentMode: "CASH",
 };
 
 const SKINS = new Set(["OFF", "NET", "GROSS"]);
@@ -119,11 +125,14 @@ export function cleanSettings(raw: Partial<Record<keyof GameSettings, unknown>>,
 
   const fee = Math.round(Number(raw.entryFeePence));
   const entryFeePence = Number.isFinite(fee) ? Math.max(0, Math.min(50_000, fee)) : 0;
+  // Cash unless the organiser explicitly asked for card payments.
+  const paymentMode: PaymentMode = raw.paymentMode === "STRIPE" ? "STRIPE" : "CASH";
 
   return {
     teamNames,
     matches,
     entryFeePence,
+    paymentMode,
     skins: typeof raw.skins === "string" && SKINS.has(raw.skins) ? (raw.skins as SkinsMode) : "OFF",
     skinsCarry: raw.skinsCarry === undefined ? true : Boolean(raw.skinsCarry),
     teamFormat:
@@ -145,6 +154,7 @@ export async function getGameSettings(eventId: string): Promise<GameSettings> {
     teamNames: parseJsonArray(row.teamNames),
     matches: parseJsonArray(row.matches),
     entryFeePence: row.entryFeePence,
+    paymentMode: row.paymentMode,
   }, 36);
 }
 
@@ -158,6 +168,7 @@ export async function saveGameSettings(eventId: string, settings: GameSettings):
     teamNames: JSON.stringify(settings.teamNames),
     matches: JSON.stringify(settings.matches),
     entryFeePence: settings.entryFeePence,
+    paymentMode: settings.paymentMode,
     updatedAt: new Date().toISOString(),
   };
   await db

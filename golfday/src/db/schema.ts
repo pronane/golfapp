@@ -229,6 +229,8 @@ export const eventSettings = sqliteTable("event_settings", {
   matches: text("matches").notNull().default("[]"),
   /** 0 = free; otherwise the entry fee in pence */
   entryFeePence: integer("entry_fee_pence").notNull().default(0),
+  /** CASH = collect on the day; STRIPE = pay by card online. */
+  paymentMode: text("payment_mode").notNull().default("CASH"),
   updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
 });
 
