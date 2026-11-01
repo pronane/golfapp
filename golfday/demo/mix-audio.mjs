@@ -50,6 +50,9 @@ const browser = await puppeteer.launch({
   headless: true,
   args: ["--autoplay-policy=no-user-gesture-required", "--no-sandbox", "--hide-scrollbars"],
   defaultViewport: { width: W, height: H },
+  // the mix runs in real time, so a long film needs a far longer CDP budget
+  // than the 180s default (the evaluate call only returns when the video ends)
+  protocolTimeout: 30 * 60 * 1000,
 });
 const page = await browser.newPage();
 await page.setViewport({ width: W, height: H });

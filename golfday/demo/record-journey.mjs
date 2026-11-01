@@ -1,6 +1,8 @@
 /**
- * End-to-end journey recorder: films one golf day from an empty database to a
- * live leaderboard, using only the UI - organiser first, then a player.
+ * End-to-end journey recorder: films a whole society golf day from a fresh
+ * database using only the UI - a society and a season, a Texas scramble day,
+ * the field and teams, a player carding the team's holes, the live board, the
+ * order of merit, an entry fee and a refund.
  *
  *   node demo/record-journey.mjs --out=demo/raw/journey.webm
  *
@@ -28,9 +30,11 @@ const args = Object.fromEntries(
   }),
 );
 const out = args.out ?? path.join(HERE, "raw", "journey.webm");
-const EVENT_NAME = "Captains' Charity Day 2027";
+const EVENT_NAME = "Captains' Scramble 2027";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** DRY=1 walks the whole journey without recording, to check selectors fast. */
+const DRY = process.env.DRY === "1";
 const db = createClient({ url: process.env.DATABASE_URL ?? "file:./data/golfday.db" });
 
 let shotNo = 0;
@@ -258,197 +262,238 @@ const el = {
   byText: (text, tag = "button") => `${tag}::-p-text(${text})`,
 };
 
+const sleepLong = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function waitFor(demo, predicate, label, tries = 100) {
+  for (let i = 0; i < tries; i += 1) {
+    if (await predicate()) return true;
+    await sleepLong(250);
+  }
+  throw new Error(`timed out waiting for ${label} (at ${demo.page.url()})`);
+}
 
 async function journey() {
   fs.mkdirSync(SHOTS, { recursive: true });
   const demo = await Recorder.create();
   await demo.page.goto("about:blank");
-  await demo.start();
-  await demo.title("One golf day, start to finish", "Organiser sets it up · players enter · a group scores · the board updates", 3600);
+  if (!DRY) await demo.start();
+  await demo.title(
+    "A society golf day, start to finish",
+    "club and season · a Texas scramble · team card · live board · order of merit · refund",
+    3800,
+  );
 
-  // ── Organiser ────────────────────────────────────────────────────────────
-  await demo.goto("/", "1. An organiser starts here, with nothing but a course and a date.");
+  // ── The club ─────────────────────────────────────────────────────────────
+  await demo.goto("/", "1. A golf day - and now the club that runs it, its season and its money.");
   await demo.shot("landing");
 
-  await demo.goto("/login", "2. They sign in.");
-  await demo.type("#email", "admin@golfday.app", { caption: "Alex Morgan, event organiser." });
+  await demo.goto("/login", "2. Alex Morgan, the society's secretary, signs in.");
+  await demo.type("#email", "admin@golfday.app", { caption: "Alex runs the society's golf days." });
   await demo.type("#password", "golfday123");
-  await demo.click("button[type=submit]", { settle: 3200, caption: "Straight to their own golf and the events they run." });
+  await demo.click("button[type=submit]", { settle: 3200, caption: "Into everything they organise." });
   await demo.shot("signed-in");
 
-  await demo.goto("/admin", "3. The organiser console - every golf day they run.");
-  await demo.shot("organiser-console");
+  await demo.goto("/societies", "3. A society keeps a roster, a fixture list and a season in one place.");
+  await demo.shot("societies");
+  await demo.type("#society-name", "Harrow Golf Society", { caption: "Start a society: Alex becomes its owner." });
+  await demo.type("#society-club", "Harrow Golf Club");
+  await demo.click(el.byText("Create society"), { settle: 2600, caption: "It gets a six-character code, so members can join themselves." });
+  await waitFor(demo, () => /\/societies\/[a-z0-9-]+$/.test(demo.page.url()), "the society page");
+  await sleepLong(1200);
+  await demo.shot("society");
 
-  await demo.goto("/admin/events/new", "4. Create a golf day. Step one: name it and set the date.");
-  await demo.type("#name", EVENT_NAME, { caption: "Name, date, first tee and the handicap allowance." });
-  await demo.type("#desc", "Three-ball better-ball. Shotgun start at 08:30 - best two scores count.");
-  await demo.setValue("#date", "2027-06-12", { caption: "Saturday 12 June 2027, first tee 08:30." });
-  await demo.setValue("#time", "08:30");
-  await demo.shot("wizard-step-1");
+  await demo.type('input[placeholder^="Search players"]', "Sam", { caption: "The roster comes from the player directory, handicaps included." });
+  await demo.clickButton("Roster", "Add", { settle: 1900, caption: "Sam is in." });
+  await demo.type('input[placeholder^="Search players"]', "Priya", { settle: 1500 });
+  await demo.clickButton("Roster", "Add", { settle: 1900, caption: "So is Priya." });
+  await demo.shot("society-roster");
 
-  await demo.click(el.byText("Next: choose the course"), { caption: "5. Step two: which course is it played on?" });
-  await demo.click(el.byText("Type a new course"), {
-    settle: 1200,
-    caption: "No course in the library? The admin names it and supplies the card by hand.",
-  });
-  await demo.type("#cname", "Harrow Golf Club");
-  await demo.type("#cclub", "Harrow Golf Club");
-  await demo.type("#caddr", "Oxhey Lane, Harrow");
-  await demo.scroll(360, { caption: "Par and stroke index for all 18 holes - editable hole by hole." });
-  await demo.shot("wizard-course-card");
-  await demo.scroll(-360, { settle: 600 });
+  const society = (
+    await db.execute({ sql: "select id, slug, join_code from societies order by created_at desc limit 1" })
+  ).rows[0];
+  console.log("society:", society);
 
-  await demo.click(el.byText("Next: review"), { caption: "6. Step three: review what will be created." });
+  // ── The season ───────────────────────────────────────────────────────────
+  await demo.scroll(520, { caption: "4. And a season: the order of merit that runs across the year." });
+  await demo.type("#season-name", "2027 Order of Merit");
+  await demo.setValue("#season-start", "2027-01-01");
+  await demo.setValue("#season-end", "2027-12-31");
+  await demo.say("A season has a window: only golf days played inside it score.");
+  await sleepLong(900);
+  await demo.shot("season-form");
+  await demo.click(el.byText("Create season"), { settle: 2800, caption: "A win is worth 100, second 90, and so on down the field." });
+  await waitFor(demo, () => demo.page.url().includes("/seasons/"), "the season page");
+  await sleepLong(1200);
+  await demo.shot("season-empty");
+
+  const season = (await db.execute({ sql: "select id, slug from seasons order by created_at desc limit 1" })).rows[0];
+  console.log("season:", season);
+
+  // ── The golf day ─────────────────────────────────────────────────────────
+  await demo.goto(`/societies/${society.slug}`, "5. Back at the club: a golf day created here joins the fixture list by itself.");
+  await demo.click(el.byText("New golf day", "a"), { settle: 2600, caption: "The three-step wizard." });
+
+  await demo.type("#name", EVENT_NAME, { caption: "Name it, pick the date and the first tee." });
+  await demo.type("#desc", "Texas scramble, teams of four. Every player's drive has to be used at least four times.");
+  await demo.setValue("#date", "2027-06-12");
+  await demo.setValue("#time", "09:00");
+  await demo.page.select("#format", "TEXAS_SCRAMBLE");
+  await demo.say("Format: Texas scramble - the card belongs to the team, not the player.");
+  await sleepLong(1200);
+  await demo.shot("wizard-format");
+
+  await demo.click(el.byText("Next: choose the course"), { caption: "6. Step two: the course and its card." });
+  await demo.type('input[placeholder^="Search by course"]', "Sunningdale", { settle: 1800 });
+  await demo.clickIn(
+    () => {
+      const button = [...document.querySelectorAll("button")].find(
+        (b) => b.textContent.includes("Old Course") && b.textContent.includes("Sunningdale"),
+      );
+      if (!button) return null;
+      button.scrollIntoView({ block: "center" });
+      const r = button.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    },
+    { caption: "Picked from the course library - par, stroke index and tees come with it.", settle: 1600 },
+  );
+  await demo.click(el.byText("Next: review"), { caption: "7. Review. The card is snapshotted onto the day, so later edits cannot rewrite it." });
   await demo.shot("wizard-review");
-  await demo.click(el.byText("Create golf day"), { settle: 1800, caption: "Created - with a join code, tee groups and a leaderboard link." });
-  for (let i = 0; i < 40; i += 1) {
-    if (demo.page.url().includes("/admin/events/")) break;
-    await sleep(300);
-  }
-  await sleep(1600);
+  await demo.click(el.byText("Create golf day"), { settle: 2200, caption: "Created - with a join code, a team scorecard per four-ball and a leaderboard link." });
+  await waitFor(demo, () => demo.page.url().includes("/admin/events/"), "the organiser console");
+  await sleepLong(1800);
   await demo.shot("event-created");
 
-  // Poll: the row is committed by the API a moment after the console renders.
   let event;
-  for (let i = 0; i < 60 && !event; i += 1) {
-    event = (
-      await db.execute({
-        sql: "select id, slug, join_code from events where name = ? order by created_at desc limit 1",
-        args: [EVENT_NAME],
-      })
-    ).rows[0];
-    if (!event) await sleep(300);
+  for (let i = 0; i < 80 && !event; i += 1) {
+    event = (await db.execute({ sql: "select id, slug, join_code from events where name = ? order by created_at desc limit 1", args: [EVENT_NAME] })).rows[0];
+    if (!event) await sleepLong(300);
   }
   console.log("event:", event);
   if (!event) throw new Error(`the wizard did not create "${EVENT_NAME}"`);
 
-  await demo.click(el.byText("Field"), { caption: "7. The field. Players can be picked from the directory..." });
-  await demo.type('input[placeholder^="Search existing players"]', "Mei", { settle: 1400 });
-  for (const name of ["Mei", "Gareth", "James"]) {
-    await demo.type('input[placeholder^="Search existing players"]', name, { settle: 1500 });
-    await demo.clickButton("Add a player", "Add", { caption: `${name}'s card, added to the field.`, settle: 1700 });
+  // ── Field and teams ──────────────────────────────────────────────────────
+  await demo.click(el.byText("Field"), { caption: "8. The field." });
+
+  const fieldCount = async () =>
+    Number(
+      (await db.execute({ sql: "select count(*) as n from event_players where event_id = ? and status = 'REGISTERED'", args: [event.id] })).rows[0].n,
+    );
+
+  /**
+   * The result list refreshes a beat after the click, so clicking "Add" twice in
+   * a row can hit the same player again (and the API rightly refuses). Search,
+   * click that specific row, then wait for the registration to land in the db.
+   */
+  async function addPlayer(name, caption) {
+    const before = await fieldCount();
+    const findRow = (firstName) =>
+      demo.page.evaluate((firstName) => {
+        const section = [...document.querySelectorAll("section")].find((s) => s.querySelector("h2")?.textContent?.includes("Add a player"));
+        const row = [...(section?.querySelectorAll("li") ?? [])].find((li) => li.textContent.trim().startsWith(firstName));
+        const button = row?.querySelector("button");
+        if (!button) return null;
+        button.scrollIntoView({ block: "center" });
+        const r = button.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }, firstName);
+    // the directory search is debounced and is re-run after every add, so the
+    // result list can lag the typed text by a second or two: poll, and retype
+    // once if the row still has not appeared (a stale query can also return the
+    // previous player only).
+    let box = null;
+    for (let attempt = 0; attempt < 3 && !box; attempt += 1) {
+      await demo.type('input[placeholder^="Search existing players"]', name, { settle: 900, ...(attempt === 0 && caption ? { caption } : {}) });
+      for (let i = 0; i < 10 && !box; i += 1) {
+        box = await findRow(name);
+        if (!box) await sleepLong(250);
+      }
+    }
+    if (!box) throw new Error(`no search result for ${name}`);
+    await demo.moveTo(box.x, box.y, 12);
+    await demo.page.evaluate((x, y) => window.__cursorTo?.(x, y, true), box.x, box.y).catch(() => {});
+    await sleepLong(200);
+    await demo.page.mouse.click(box.x, box.y);
+    for (let i = 0; i < 40; i += 1) {
+      if ((await fieldCount()) > before) break;
+      await sleepLong(250);
+    }
   }
-  await demo.type('input[placeholder="Full name"]', "Rob Falconer", { caption: "...or a guest with no account, who can claim their entry later." });
-  await demo.type('input[placeholder="Handicap index"]', "13.4");
-  await demo.type('input[placeholder="Club"]', "Harrow Golf Club");
-  await demo.clickButton("New guest player", "Create and enter", { settle: 2200 });
+
+  const field = ["Mei", "Gareth", "James", "Tom", "Nina", "Ravi", "Sam", "Priya"];
+  for (let i = 0; i < field.length; i += 1) {
+    await addPlayer(field[i], i === 0 ? "Players come from the directory - handicap and club come with them." : null);
+  }
+  const registered = await fieldCount();
+  console.log("field size:", registered);
+  if (registered !== field.length) throw new Error(`expected ${field.length} in the field, found ${registered}`);
   await demo.shot("field");
 
-  await demo.click(el.byText("Groups"), { caption: "8. Tee groups: one click allocates four-balls and tee times." });
+  await demo.click(el.byText("Groups"), { caption: "9. Two four-balls, ten minutes apart, in one click." });
   await demo.page.evaluate(() => {
     const section = [...document.querySelectorAll("section")].find((s) => s.querySelector("h2")?.textContent?.includes("Tee groups"));
     const select = section?.querySelector("select");
     if (!select) return;
-    select.value = "3";
+    select.value = "4";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await sleep(700);
-  await demo.clickButton("Tee groups", "Auto-allocate", { settle: 2600, caption: "Three-balls for this one, with tee times ten minutes apart." });
-  await demo.shot("groups");
-  await demo.scroll(420, { caption: "Each group has its own private scorecard link - no logins on the course." });
-  await demo.shot("group-scorecard-links");
+  await sleepLong(700);
+  await demo.clickButton("Tee groups", "Auto-allocate", { settle: 2800, caption: "Each team gets its own private scorecard link - no logins on the course." });
+  await demo.shot("teams");
+  await demo.scroll(420);
+  await demo.shot("team-scorecard-links");
   await demo.scroll(-420, { settle: 600 });
 
+  // ── Money ────────────────────────────────────────────────────────────────
+  await demo.click(el.byText("Games"), { caption: "10. £25 a head. Card payments go through Stripe when it is switched on; today the desk takes cash." });
+  await demo.type("#g-fee", "25");
+  await demo.clickButton("Entry fee", "Save fee", { settle: 2000, caption: "Saved." });
+  await demo.shot("entry-fee");
+
   await demo.click(el.byText("Overview"), { settle: 1400 });
-  await demo.clickButton("Run the day", "In progress", {
-    settle: 2200,
-    caption: "9. The day starts: scoring opens and the board goes live.",
-  });
-  await demo.scroll(520, { caption: "The join code is what players type to put themselves in the field." });
-  await demo.shot("join-code");
-  await demo.scroll(-520, { settle: 600 });
+  await demo.clickButton("Run the day", "In progress", { settle: 2400, caption: "11. Open the day: scoring unlocks and the board goes live." });
+  await demo.shot("day-open");
 
-  // ── Player ───────────────────────────────────────────────────────────────
+  // ── The season takes the fixture ─────────────────────────────────────────
+  await demo.goto(`/seasons/${season.slug}`, "12. The season knows nothing yet - one fixture to add.");
+  await demo.page.select("#season-fixture", event.id);
+  await demo.say("The scramble counts towards the order of merit.");
+  await sleepLong(800);
+  await demo.clickButton("Fixtures", "Add fixture", { settle: 2600, caption: "Attached. The table fills in as the cards come in." });
+  await demo.shot("season-fixture");
+
+  // ── The player, on the course ────────────────────────────────────────────
   await demo.page.evaluate(() => fetch("/api/auth/logout", { method: "POST" }));
-  await demo.goto("/register", "10. Now a player. New account, with their Golf England ID.");
-  await demo.type("#name", "Fiona MacLeod", { caption: "One lookup pulls the handicap index and home club from Golf England." });
-  await demo.type("#email", "fiona.journey@golfday.app");
+  await demo.goto("/login", "13. Now a player's phone: Sam, in the field, with a team to keep score for.");
+  await demo.type("#email", "sam@golfday.app");
   await demo.type("#password", "golfday123");
-  await demo.type("#ge", "GE100246");
-  await demo.click(el.byText("Look up"), { settle: 900, caption: "Index and home club, straight from Golf England." });
-  // Wait for the lookup to resolve rather than guessing at a settle time.
-  for (let i = 0; i < 60; i += 1) {
-    const state = await demo.page.evaluate(() => {
-      const msg = [...document.querySelectorAll("p")].map((p) => p.textContent ?? "").find((t) => t.startsWith("Found") || t.includes("No golfer"));
-      return { msg, hcp: document.querySelector("#hcp")?.value ?? "" };
-    });
-    if (state.msg && state.hcp) break;
-    await sleep(250);
-  }
-  await demo.say("Found: index 14.9 at St Andrews Links - the organiser never types it in.");
-  await sleep(1200);
-  await demo.shot("player-register");
-  await demo.click("button[type=submit]", { settle: 1500, caption: "Signed in as a player." });
-  for (let i = 0; i < 60; i += 1) {
-    if (!demo.page.url().includes("/register")) break;
-    await sleep(250);
-  }
-  const stuck = await demo.page.evaluate(() => document.body.innerText.match(/[^\n]*(?:exist|incorrect|wrong|valid)[^\n]*/i)?.[0] ?? null);
-  if (demo.page.url().includes("/register")) throw new Error(`registration did not complete: ${stuck ?? "no error shown"}`);
-  await sleep(1200);
+  await demo.click("button[type=submit]", { settle: 3000, caption: "Signed in as a player." });
 
-  await demo.goto("/events", "11. The fixture list. Entering is a join code, or the organiser adding you.");
-  await demo.type('input[placeholder="A1B2C3"]', event.join_code ?? "ABC123", { caption: "Typing the six-character join code the organiser shared." });
-  await demo.shot("join-by-code");
-  // The join has to land before the group picker is useful, so drive it through
-  // the component's own API and then film the page it produces.
-  await demo.page.evaluate(async (code) => {
-    await fetch("/api/events/join", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-  }, String(event.join_code));
-  await demo.say("In the field. Now the event page for the day.");
-  await demo.goto(`/events/${event.slug}`, "12. On the event page: their card, their group, the field.");
-  await sleep(1200);
+  await demo.goto(`/events/${event.slug}`, "14. The day as the field sees it: teams, tee times and the live board.");
+  await demo.shot("event-page");
 
-  // Requirement 4: the player chooses their own tee group. No admin involved.
-  const groups = (
-    await db.execute({ sql: "select id, name, tee_time from groups where event_id = ? order by sort_order", args: [event.id] })
-  ).rows;
-  const target = groups[groups.length - 1];
-  await demo.say("Requirement four: the player marks their own tee group - no admin needed.");
-  await demo.click("select.select", { settle: 700 });
-  await demo.page.select("select.select", String(target.id));
-  // Wait for the save to round-trip and the page to re-render with the new group.
-  let settled = false;
-  for (let i = 0; i < 40 && !settled; i += 1) {
-    settled = await demo.page.evaluate((id) => document.querySelector("select.select")?.value === id, String(target.id));
-    if (!settled) await sleep(250);
-  }
-  console.log("group picker settled:", settled, "into", target.name);
-  await sleep(1400);
-  await demo.shot("player-picks-group");
-
-  await demo.goto("/dashboard", "13. Their own golf: today's round, their group, and the live board.");
-  await demo.shot("player-dashboard");
-
-  const fiona = (
+  const samGroup = (
     await db.execute({
-      sql: `select ep.player_id, g.token as token, g.name as group_name, e.slug as slug, e.id as event_id
-            from event_players ep
+      sql: `select g.id, g.token, g.name from event_players ep
             join players p on p.id = ep.player_id
-            join events e on e.id = ep.event_id
-            left join groups g on g.id = ep.group_id
-            where p.name = 'Fiona MacLeod' and e.id = ? limit 1`,
+            join groups g on g.id = ep.group_id
+            where p.name = 'Sam Whitcombe' and ep.event_id = ? limit 1`,
       args: [event.id],
     })
   ).rows[0];
-  console.log("fiona:", fiona);
-  if (!fiona?.token) throw new Error("Fiona did not end up in a tee group - the group picker failed.");
+  console.log("sam's group:", samGroup);
+  if (!samGroup?.token) throw new Error("Sam did not end up in a tee group");
 
+  const otherGroup = (
+    await db.execute({ sql: "select id, token, name from groups where event_id = ? and id <> ? order by sort_order limit 1", args: [event.id, samGroup.id] })
+  ).rows[0];
+  console.log("other group:", otherGroup);
 
-  await demo.goto(`/score/${fiona.token}`, `14. The ${fiona.group_name} scorecard link. Tap the number and the card saves.`);
-  await sleep(1200);
-  await demo.shot("scorecard");
-  for (const [nth, caption] of [
-    [4, "A par on the first - two points."],
-    [3, "A birdie on the second - three points."],
-    [5, "A bogey on the third."],
-    [4, "And another par."],
-  ]) {
-    await demo.clickIn(
+  await demo.goto(`/score/${samGroup.token}`, `15. The ${samGroup.name} team card: one score per hole - and whose drive the team used.`);
+  await sleepLong(1400);
+  await demo.shot("team-card");
+
+  const clickScore = (strokes, caption) =>
+    demo.clickIn(
       (n) => {
         const grid = [...document.querySelectorAll('div[class*="sm:grid-cols-8"]')].pop();
         const buttons = grid ? [...grid.querySelectorAll("button")] : [];
@@ -458,32 +503,101 @@ async function journey() {
         const r = b.getBoundingClientRect();
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       },
-      { caption, settle: 1000, arg: nth },
+      { caption, settle: 1100, arg: strokes },
     );
-  }
-  await demo.say("The top five on the right re-ranks as the card is filled in.");
-  await sleep(1600);
-  await demo.shot("scorecard-progress");
 
-  await demo.goto(`/live/${event.slug}`, "15. The public leaderboard - the link anyone can watch.");
+  const clickDrive = (firstName, caption) =>
+    demo.clickIn(
+      (name) => {
+        const b = [...document.querySelectorAll("button")].find(
+          (btn) => btn.className.includes("pill") && btn.textContent.trim().startsWith(name),
+        );
+        if (!b) return null;
+        b.scrollIntoView({ block: "center" });
+        const r = b.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      },
+      { caption, settle: 1300, arg: firstName },
+    );
+
+  const teamMembers = (
+    await db.execute({
+      sql: `select p.name from event_players ep join players p on p.id = ep.player_id
+            where ep.group_id = ? order by p.name`,
+      args: [samGroup.id],
+    })
+  ).rows.map((r) => r.name);
+  console.log("team:", teamMembers);
+
+  // Credit the drive before carding the hole: the next tap saves both together,
+  // which is how a four-ball actually does it standing on the tee.
+  await clickDrive(teamMembers[0].split(" ")[0], "Whose drive was it? The team taps the player.");
+  await clickScore(4, "A par on the first - and the drive is logged with it.");
+  await clickDrive(teamMembers[1].split(" ")[0], "Every player's tee shot has to be used - this is tracked, not remembered.");
+  await clickScore(3, "A birdie on the second.");
+  await clickDrive(teamMembers[2].split(" ")[0]);
+  await clickScore(5, "A bogey on the third.");
+  await clickDrive(teamMembers[0].split(" ")[0]);
+  await clickScore(4, "Par on the fourth.");
+  await demo.say("The drive ledger on the right counts them, and says who still owes one.");
+  await sleepLong(1800);
+  await demo.shot("team-card-progress");
+
+  // ── The board ────────────────────────────────────────────────────────────
+  await demo.goto(`/live/${event.slug}`, "16. The public board: the team is the competitor, with a scramble team handicap.");
   await demo.shot("live-board");
-  await demo.say("Now a score from the course, while this page is open...");
+
+  await demo.say("Another team starts carding their holes, while this page is open...");
+  const otherCard = [3, 3, 4, 4, 4, 3];
   await demo.page.evaluate(
-    async (eventId, playerId) => {
-      await fetch("/api/scores", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId, playerId, holeNumber: 5, strokes: 3 }),
-      });
+    async (eventId, groupId, strokesPerHole) => {
+      for (let i = 0; i < strokesPerHole.length; i += 1) {
+        await fetch("/api/scramble", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId, groupId, holeNumber: i + 1, strokes: strokesPerHole[i] }),
+        });
+      }
     },
     event.id,
-    fiona.player_id,
+    otherGroup.id,
+    otherCard,
   );
   await demo.say("...and the board updates itself, in place, within two seconds. No refresh.");
-  await sleep(3200);
+  await sleepLong(3600);
   await demo.shot("live-board-updated");
 
-  await demo.title("That is the whole day", "set up · enter · group · score · live board", 3600);
+  // ── The money, back at the desk ──────────────────────────────────────────
+  await demo.page.evaluate(() => fetch("/api/auth/logout", { method: "POST" }));
+  await demo.goto("/login", "17. Back at the desk: the money.");
+  await demo.type("#email", "admin@golfday.app");
+  await demo.type("#password", "golfday123");
+  await demo.click("button[type=submit]", { settle: 3000 });
+
+  await demo.goto(`/admin/events/${event.id}`, "18. The organiser console for this day.");
+  await demo.click(el.byText("Payments"), { caption: "19. Who has paid - and a refund recorded against that entry." });
+  await demo.clickButton("Entry fees", "Mark paid", { settle: 2000, caption: "A player paid their £25 in cash - the organiser marks it here." });
+  await sleepLong(600);
+  await demo.shot("payments");
+
+  await demo.clickButton("Entry fees", "Refund", { settle: 1600, caption: "Then a part refund - part or all of it, never more than was paid." });
+  await demo.type("#refund-amount", "10");
+  await demo.click(el.byText("Refund £10"), { settle: 2600, caption: "Checked against what is left of that entry, so a double refund is impossible. With card payments on, the refund goes back through Stripe." });
+  await demo.shot("refund");
+
+  // ── The season, after the day ────────────────────────────────────────────
+  await demo.goto(`/seasons/${season.slug}`, "20. And the order of merit, built from the day: every team member earns the team's result.");
+  await sleepLong(1400);
+  await demo.shot("order-of-merit");
+
+  await demo.goto(`/live/${event.slug}?tv=1`, "21. The clubhouse screen: the same board, big enough to read from the bar.");
+  await sleepLong(3000);
+  await demo.title("That is the whole day", "society · season · scramble · team card · live board · refund", 3800);
+  if (DRY) {
+    await demo.browser.close();
+    console.log("DRY run complete - all steps reached the end.");
+    return;
+  }
   await demo.stop(out);
 }
 

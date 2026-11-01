@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { formatEventDate, ordinal } from "@/lib/format";
 import { getCurrentUser } from "@/lib/auth";
-import { canManageSeason, getSeasonPage } from "@/lib/seasons";
+import { canManageSeason, getSeasonPage, isOutsideSeason } from "@/lib/seasons";
 import { SeasonFixtures } from "@/components/SeasonFixtures";
 import { getSocietyById } from "@/lib/societies";
 import { Trophy } from "@/components/Icons";
@@ -152,6 +152,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ slug: s
           date: fixture.date,
           courseName: fixture.courseName,
           status: fixture.status,
+          outside: isOutsideSeason(season, fixture.date),
         }))}
       />
     </div>

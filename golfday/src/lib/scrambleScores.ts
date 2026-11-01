@@ -11,6 +11,7 @@ import {
   rankScrambleTeams,
   scrambleTeamHandicap,
   summariseScramble,
+  teamStrokesReceived,
   type ScrambleHole,
   type ScrambleMember,
   type ScrambleScoreRow,
@@ -145,7 +146,10 @@ export async function getGroupScrambleCard(
           strokeIndex: hole.strokeIndex,
           strokes: row?.strokes ?? null,
           drivePlayerId: row?.drivePlayerId ?? null,
-          shotsReceived: result?.shotsReceived ?? 0,
+          // Strokes received depend only on the team handicap and the hole, so
+          // they are known before the team has carded it (the score pad shows
+          // "receives 1 shot" while the hole is still empty).
+          shotsReceived: teamStrokesReceived(teamHandicap, hole.strokeIndex),
           net: result?.net ?? null,
           points: result?.points ?? null,
         };

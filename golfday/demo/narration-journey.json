@@ -1,11 +1,12 @@
 [
- {"file":"j1.mp3","start":3.6},
- {"file":"j2.mp3","start":26.4},
- {"file":"j3.mp3","start":49.0},
- {"file":"j4.mp3","start":71.0},
- {"file":"j5.mp3","start":120.0},
- {"file":"j6.mp3","start":155.6},
- {"file":"j7.mp3","start":177.9},
- {"file":"j8.mp3","start":204.6},
- {"file":"j9.mp3","start":236.3}
+ {"file": "j1.mp3", "start": 3.8},
+ {"file": "j2.mp3", "start": 30.0},
+ {"file": "j3.mp3", "start": 45.0},
+ {"file": "j4.mp3", "start": 68.5},
+ {"file": "j5.mp3", "start": 93.0},
+ {"file": "j6.mp3", "start": 105.5},
+ {"file": "j7.mp3", "start": 129.0},
+ {"file": "j8.mp3", "start": 151.0},
+ {"file": "j9.mp3", "start": 169.8},
+ {"file": "j10.mp3", "start": 181.2}
 ]
