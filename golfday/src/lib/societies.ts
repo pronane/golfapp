@@ -14,6 +14,7 @@ import { eventPlayers, events, players, seasons, societyEvents, societyMembers, 
 import type { SessionUser } from "./auth";
 import { ApiError } from "./http";
 import { newId, newJoinCode, uniqueSlug } from "./ids";
+import { maskSecret, sealSecret } from "./secrets";
 
 export type SocietyRole = "OWNER" | "SECRETARY" | "MEMBER";
 export type SocietyRecord = typeof societies.$inferSelect;
@@ -171,6 +172,53 @@ export async function listSocietyEvents(societyId: string) {
     .where(eq(societyEvents.societyId, societyId))
     .orderBy(asc(events.date));
   return rows.map((r) => r.event);
+}
+
+/**
+ * The handicap integration a society has configured, as safe-to-display data.
+ * Credentials are never returned - only whether they exist and their shape.
+ */
+export async function getSocietyIntegration(societyId: string) {
+  const [society] = await db.select().from(societies).where(eq(societies.id, societyId)).limit(1);
+  if (!society) return null;
+  return {
+    societyId: society.id,
+    source: (society.handicapSource ?? "DIRECTORY") as "MANUAL" | "DIRECTORY" | "WHS" | "CDH",
+    country: society.handicapCountry ?? "eng",
+    apiBase: society.handicapApiBase ?? "",
+    username: society.handicapApiUsername ?? "",
+    hasSecret: Boolean(society.handicapApiSecret),
+    hasClientToken: Boolean(society.handicapClientToken),
+    secretMask: maskSecret(society.handicapApiSecret),
+    updatedAt: society.handicapUpdatedAt,
+  };
+}
+
+/**
+ * Saves a society's handicap integration. Owners and secretaries only; the
+ * caller checks the role. An empty string clears a credential, `undefined`
+ * leaves it untouched, so the UI can show a masked secret and still save.
+ */
+export async function updateSocietyIntegration(
+  societyId: string,
+  input: {
+    source?: "MANUAL" | "DIRECTORY" | "WHS" | "CDH";
+    country?: string;
+    apiBase?: string;
+    username?: string;
+    secret?: string;
+    clientToken?: string;
+  },
+) {
+  const set: Record<string, unknown> = { handicapUpdatedAt: new Date().toISOString() };
+  if (input.source) set.handicapSource = input.source;
+  if (input.country) set.handicapCountry = input.country.toLowerCase();
+  if (input.apiBase !== undefined) set.handicapApiBase = input.apiBase.trim() || null;
+  if (input.username !== undefined) set.handicapApiUsername = input.username.trim() || null;
+  if (input.secret !== undefined) set.handicapApiSecret = input.secret ? sealSecret(input.secret) : null;
+  if (input.clientToken !== undefined) set.handicapClientToken = input.clientToken ? sealSecret(input.clientToken) : null;
+  await db.update(societies).set(set).where(eq(societies.id, societyId));
+  return getSocietyIntegration(societyId);
 }
 
 /**

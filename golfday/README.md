@@ -97,6 +97,9 @@ MP4 and the full script for all three. Static screenshots of every screen are in
 * **Audit trail** (`score_audit`) for every score change - important when a card is disputed.
 * **Group sweep** (combined points per four-ball) and a colour-coded hole-by-hole grid.
 * **CSV export** of the final card for the club noticeboard, plus CSV import for players.
+* **Sign in with Google, Apple or Facebook** (optional, per deployment) as well as email and
+  password. Linking is by verified email, an unverified one is refused, and a social sign-in
+  creates a player - never an admin. See [`docs/SIGN-IN.md`](docs/SIGN-IN.md).
 * **Join code** so players can enter themselves, and **claim codes** so a guest player added by an organiser can later take ownership of their record.
 * **Revisions + SSE** instead of websockets: every write bumps `event_state.revision`, the stream pushes the board when it changes. This keeps it serverless-friendly.
 
@@ -118,6 +121,11 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   roster** - so the same regulars do not have to be searched and added one at a time
   every month (anyone full or already playing that day is skipped and reported, not
   silently dropped).
+* **Per-society handicaps** - each club chooses where its indexes come from: typed in by
+  hand, the GolfDay directory, the national WHS platform (England / Scotland / Wales /
+  Ireland, via the DotGolf ISV API) or the club's own CDH endpoint. Credentials are sealed
+  with AES-256-GCM, never returned to a browser, and a **Test lookup** button proves the
+  integration before a competition. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 * **Seasons and the order of merit** (`/seasons/<slug>`) - attach fixtures to a season and
   the table builds itself from the live boards. Positions score 100-90-80-75… down the
   field (or sum Stableford points instead), ties share the position, and a **best-N**
@@ -189,6 +197,7 @@ logging in.
 | POST | `/api/courses/import` | save a provider course locally |
 | GET/POST | `/api/players`, `/api/players/import`, PATCH `/api/players/me` | players, CSV import, handicap refresh |
 | GET/POST | `/api/societies`, `/api/societies/join` | my societies, start one, join with a code |
+| GET/PUT/POST | `/api/societies/[id]/integration` | handicap source + credentials (masked), and a live "test lookup" |
 | GET/PATCH | `/api/societies/[id]` | society, roster and fixtures |
 | POST/DELETE | `/api/societies/[id]/members` | add / remove a member (secretary tools) |
 | POST/DELETE | `/api/societies/[id]/events` | put a golf day on the fixture list |

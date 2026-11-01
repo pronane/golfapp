@@ -13,6 +13,18 @@ const ADDED_COLUMNS: string[] = [
   "ALTER TABLE event_payments ADD COLUMN stripe_payment_intent TEXT",
   "ALTER TABLE event_payments ADD COLUMN refunded_pence INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE event_payments ADD COLUMN refunded_at TEXT",
+  // per-society handicap integration
+  "ALTER TABLE societies ADD COLUMN handicap_source TEXT NOT NULL DEFAULT 'DIRECTORY'",
+  "ALTER TABLE societies ADD COLUMN handicap_country TEXT NOT NULL DEFAULT 'eng'",
+  "ALTER TABLE societies ADD COLUMN handicap_api_base TEXT",
+  "ALTER TABLE societies ADD COLUMN handicap_api_username TEXT",
+  "ALTER TABLE societies ADD COLUMN handicap_api_secret TEXT",
+  "ALTER TABLE societies ADD COLUMN handicap_client_token TEXT",
+  "ALTER TABLE societies ADD COLUMN handicap_updated_at TEXT",
+  // social sign-in
+  "ALTER TABLE users ADD COLUMN oauth_provider TEXT",
+  "ALTER TABLE users ADD COLUMN oauth_subject TEXT",
+  "CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_unique ON users (oauth_provider, oauth_subject)",
 ];
 
 function isDuplicateColumn(err: unknown): boolean {

@@ -1,17 +1,23 @@
 /**
- * Golf England / WHS handicap lookup.
+ * Handicap lookups, and where a society's numbers come from.
  *
- * England Golf does not publish an open, unauthenticated API. The two supported
- * routes are:
- *   1. WHS "CDH" (Centralised Handicap Database) API - available to clubs and
- *      iGolf subscribers via England Golf, usually with a partner API key.
- *   2. A CSV export from the club's handicap software (fully supported here).
+ * Four sources, resolved per society (falling back to the deployment default):
  *
- * This adapter therefore ships with a realistic mock directory so the feature
- * can be demonstrated end-to-end, and a `cdh` mode that simply points at the
- * configured endpoint without changing any application code.
+ *   MANUAL     the organiser/player types the index in - always available
+ *   DIRECTORY  the built-in demo directory (`mock`) - no credentials needed
+ *   WHS        the national WHS platform (DotGolf ISV API, see ./whs.ts)
+ *   CDH        a society's own `GET {base}/golfers/{id}` proxy
+ *
+ * Nothing downstream cares which one answered: every path returns the same
+ * `GolfEnglandPlayer` shape, and a lookup only ever *offers* a number - the
+ * organiser can still overwrite it before saving.
  */
+import { eq } from "drizzle-orm";
+import { db } from "@/db/client";
+import { societies } from "@/db/schema";
 import { ApiError } from "./http";
+import { openSecret } from "./secrets";
+import { DEFAULT_WHS_BASE, WHS_COUNTRIES, lookupCdhProxy, lookupWhsHandicap, type WhsConfig } from "./whs";
 
 export type GolfEnglandPlayer = {
   golfEnglandId: string;
@@ -20,7 +26,7 @@ export type GolfEnglandPlayer = {
   homeClub: string;
   country: string;
   gender?: "M" | "F" | "X";
-  source: "GOLF_ENGLAND" | "MOCK";
+  source: "GOLF_ENGLAND" | "MOCK" | "WHS" | "CDH" | "DIRECTORY";
   updatedAt: string;
 };
 
@@ -37,8 +43,147 @@ const MOCK_DIRECTORY: GolfEnglandPlayer[] = [
   { golfEnglandId: "GE100250", name: "Nina Petrova", handicapIndex: 11.4, homeClub: "The Belfry", country: "ENG", gender: "F", source: "MOCK", updatedAt: "2026-09-30" },
 ];
 
-export function golfEnglandMode(): "mock" | "cdh" {
-  return (process.env.GOLF_ENGLAND_MODE ?? "mock").toLowerCase() === "cdh" ? "cdh" : "mock";
+export type HandicapSource = "MANUAL" | "DIRECTORY" | "WHS" | "CDH";
+
+export type ResolvedProvider = {
+  source: HandicapSource;
+  /** Human-readable description of where the numbers come from. */
+  label: string;
+  /** True when a lookup can actually be attempted right now. */
+  ready: boolean;
+  /** Why it is not ready, or a warning worth showing an organiser. */
+  detail: string;
+  societyId: string | null;
+  societyName: string | null;
+  country: string;
+  whs?: WhsConfig;
+  cdh?: { baseUrl: string; apiKey?: string | null; country: string };
+};
+
+export const HANDICAP_SOURCES: { value: HandicapSource; label: string; blurb: string }[] = [
+  {
+    value: "MANUAL",
+    label: "Typed in by hand",
+    blurb: "No external lookups. Organisers and players enter a handicap index themselves.",
+  },
+  {
+    value: "DIRECTORY",
+    label: "GolfDay directory",
+    blurb: "Search the players already in GolfDay. No credentials, no outside calls - the default.",
+  },
+  {
+    value: "WHS",
+    label: "National WHS database",
+    blurb:
+      "England Golf, Scottish Golf, Wales Golf or Golf Ireland via the DotGolf ISV API. Needs the club's credentials.",
+  },
+  {
+    value: "CDH",
+    label: "Our own CDH endpoint",
+    blurb: "A REST endpoint you run that answers GET {base}/golfers/{id}. Useful when your club software exports one.",
+  },
+];
+
+function envProvider(): ResolvedProvider {
+  const mode = (process.env.GOLF_ENGLAND_MODE ?? "mock").toLowerCase();
+  const country = (process.env.WHS_COUNTRY ?? "eng").toLowerCase();
+  if (mode === "whs") {
+    const baseUrl = process.env.WHS_API_BASE || DEFAULT_WHS_BASE;
+    const clientToken = process.env.WHS_CLIENT_TOKEN || null;
+    const username = process.env.WHS_API_USERNAME || null;
+    const secretKey = process.env.WHS_API_SECRET || null;
+    const ready = Boolean(clientToken || (username && secretKey));
+    return {
+      source: "WHS",
+      label: `National WHS database (${WHS_COUNTRIES[(country as keyof typeof WHS_COUNTRIES)]?.label ?? "WHS"})`,
+      ready,
+      detail: ready ? "Configured from the deployment environment." : "WHS_API_USERNAME / WHS_API_SECRET are not set.",
+      societyId: null,
+      societyName: null,
+      country,
+      whs: { baseUrl, country, username, secretKey, clientToken },
+    };
+  }
+  if (mode === "cdh") {
+    const baseUrl = process.env.CDH_API_BASE ?? "";
+    const apiKey = process.env.CDH_API_KEY ?? null;
+    return {
+      source: "CDH",
+      label: "CDH endpoint (deployment default)",
+      ready: Boolean(baseUrl),
+      detail: baseUrl ? "Configured from the deployment environment." : "CDH_API_BASE is not set.",
+      societyId: null,
+      societyName: null,
+      country,
+      cdh: { baseUrl, apiKey, country },
+    };
+  }
+  return {
+    source: "DIRECTORY",
+    label: "GolfDay directory",
+    ready: true,
+    detail: "No external handicap database is configured.",
+    societyId: null,
+    societyName: null,
+    country,
+  };
+}
+
+/**
+ * Works out where a society's handicaps come from. A society that has never
+ * been configured inherits the deployment default, so existing installs keep
+ * working exactly as before.
+ */
+export async function resolveHandicapProvider(options?: { societyId?: string | null }): Promise<ResolvedProvider> {
+  const societyId = options?.societyId ?? null;
+  if (!societyId) return envProvider();
+  const [society] = await db.select().from(societies).where(eq(societies.id, societyId)).limit(1);
+  if (!society) return envProvider();
+
+  const source = (society.handicapSource as HandicapSource) ?? "DIRECTORY";
+  const country = (society.handicapCountry ?? "eng").toLowerCase();
+  const base = {
+    societyId: society.id,
+    societyName: society.name,
+    country,
+  };
+
+  if (source === "MANUAL") {
+    return { ...base, source, label: "Typed in by hand", ready: true, detail: `${society.name} does not use an external database.` };
+  }
+  if (source === "WHS") {
+    const clientToken = openSecret(society.handicapClientToken);
+    const secretKey = openSecret(society.handicapApiSecret);
+    const username = society.handicapApiUsername ?? null;
+    const ready = Boolean(clientToken || (username && secretKey));
+    return {
+      ...base,
+      source,
+      label: `National WHS database (${WHS_COUNTRIES[(country as keyof typeof WHS_COUNTRIES)]?.label ?? "WHS"})`,
+      ready,
+      detail: ready
+        ? "Lookups go to the national WHS platform with this society's credentials."
+        : "Add the club username and secret key (or a client token) to turn lookups on.",
+      whs: { baseUrl: society.handicapApiBase || DEFAULT_WHS_BASE, country, username, secretKey, clientToken },
+    };
+  }
+  if (source === "CDH") {
+    const baseUrl = society.handicapApiBase ?? "";
+    return {
+      ...base,
+      source,
+      label: "Society CDH endpoint",
+      ready: Boolean(baseUrl),
+      detail: baseUrl ? `Lookups go to ${baseUrl}.` : "Add the endpoint URL to turn lookups on.",
+      cdh: { baseUrl, apiKey: openSecret(society.handicapApiSecret), country },
+    };
+  }
+  return { ...base, source: "DIRECTORY", label: "GolfDay directory", ready: true, detail: "Searching players already in GolfDay." };
+}
+
+export function golfEnglandMode(): "mock" | "whs" | "cdh" {
+  const mode = (process.env.GOLF_ENGLAND_MODE ?? "mock").toLowerCase();
+  return mode === "cdh" ? "cdh" : mode === "whs" ? "whs" : "mock";
 }
 
 export function searchMockDirectory(query: string): GolfEnglandPlayer[] {
@@ -52,36 +197,46 @@ export function searchMockDirectory(query: string): GolfEnglandPlayer[] {
   );
 }
 
-/** Looks a golfer up by Golf England (CDH) ID. */
-export async function lookupByGolfEnglandId(id: string): Promise<GolfEnglandPlayer | null> {
+export function directoryGolfer(id: string): GolfEnglandPlayer | null {
   const trimmed = id.trim().toUpperCase();
   if (!trimmed) return null;
-  if (golfEnglandMode() === "cdh") {
-    const base = process.env.CDH_API_BASE;
-    const key = process.env.CDH_API_KEY;
-    if (!base || !key) {
-      throw new ApiError(503, "Golf England CDH is selected but CDH_API_BASE / CDH_API_KEY are not configured", "integration_not_configured");
-    }
-    const res = await fetch(`${base}/golfers/${encodeURIComponent(trimmed)}`, {
-      headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
-      cache: "no-store",
-    });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new ApiError(502, `Golf England lookup failed (${res.status})`, "integration_error");
-    const raw: any = await res.json();
-    return {
-      golfEnglandId: trimmed,
-      name: raw.name ?? raw.fullName ?? "",
-      handicapIndex: Number(raw.handicapIndex ?? raw.handicap ?? 0),
-      homeClub: raw.homeClub ?? raw.club ?? "",
-      country: raw.country ?? "ENG",
-      gender: raw.gender,
-      source: "GOLF_ENGLAND",
-      updatedAt: raw.updatedAt ?? new Date().toISOString().slice(0, 10),
-    };
-  }
   return MOCK_DIRECTORY.find((p) => p.golfEnglandId.toUpperCase() === trimmed) ?? null;
 }
+
+/**
+ * Looks a golfer up by their national ID (CDH / WHS member UID).
+ *
+ * Returns null when the golfer is genuinely not found - or when the society has
+ * lookups switched off, which is not an error, just nothing to offer. Throws
+ * `ApiError` only when a lookup was attempted and could not be completed, so a
+ * misconfigured credential is visible instead of looking like "no such golfer".
+ */
+export async function lookupByGolfEnglandId(
+  id: string,
+  options?: { societyId?: string | null },
+): Promise<GolfEnglandPlayer | null> {
+  const trimmed = id.trim().toUpperCase();
+  if (!trimmed) return null;
+  const provider = await resolveHandicapProvider(options);
+
+  if (provider.source === "MANUAL") return null;
+  if (provider.source === "DIRECTORY") return directoryGolfer(trimmed);
+
+  if (provider.source === "WHS") {
+    if (!provider.whs) throw new ApiError(500, "WHS provider is missing its configuration", "integration_not_configured");
+    if (!provider.ready) throw new ApiError(409, provider.detail, "integration_not_configured");
+    const found = await lookupWhsHandicap(provider.whs, trimmed);
+    return found ? { ...found, source: "WHS" } : null;
+  }
+
+  if (!provider.cdh) throw new ApiError(500, "CDH provider is missing its configuration", "integration_not_configured");
+  if (!provider.ready) throw new ApiError(409, provider.detail, "integration_not_configured");
+  const found = await lookupCdhProxy(provider.cdh, id.trim());
+  return found ? { ...found, source: "CDH" } : null;
+}
+
+/** Back-compat alias: the old name is used by the profile refresh endpoint. */
+export const lookupHandicap = lookupByGolfEnglandId;
 
 export type CsvPlayerRow = {
   name: string;
