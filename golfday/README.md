@@ -284,6 +284,13 @@ behind a session cookie. GitHub can host the **recordings** (`Screenshots site` 
 `node demo/build-gallery.mjs`) and can **fill the demo database** (`Seed the demo database`
 workflow → Turso, on demand or nightly). Both are already wired up.
 
+### One click, no shell
+
+The blueprint at the repository root (`render.yaml`) sets `AUTO_PUSH_SCHEMA=1` and
+`DEMO_AUTOSEED=1`, so a brand-new service pointed at a brand-new Turso database comes up with the
+tables created and the demo day loaded on its first boot - three environment variables and no
+`db:push` step. Reset a demo with `turso db shell <db> < seed/demo.sql`.
+
 ### The demo database as a file
 
 `seed/demo.sql` is the whole demo day (schema + 649 rows) in one diffable text file, for the hosts

@@ -1,0 +1,53 @@
+# One-click free demo of GolfDay on Render.
+#
+# Render looks for `render.yaml` at the *repository root*, and the app itself
+# lives in golfday/ - hence rootDir below. Leave Blueprint Path blank: this file
+# is what "New -> Blueprint" finds by default.
+#
+# Free plan: no card, no commercial-use restriction, but the service sleeps after
+# 15 minutes of no traffic and takes ~30-60 s to wake. There is no persistent
+# disk, so the database has to live elsewhere: Turso's free tier (5 GB, also no
+# card) holds it. See golfday/docs/PUBLIC-DEMO.md for the ten-minute runbook.
+services:
+  - type: web
+    name: golfday-demo
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: golfday
+    # --include=dev: some hosts set NODE_ENV=production during the build, and
+    # `next build` needs the TypeScript toolchain to compile this app.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Fill these in when Render asks (sync: false = the value never lives in
+      # this file). DATABASE_URL is the libsql:// URL; the token is that
+      # database's password - treat it like one.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_AUTH_TOKEN
+        sync: false
+      # openssl rand -base64 48 - the app refuses to boot in production without
+      # a real one, because a guessable secret lets anybody forge a login.
+      - key: AUTH_SECRET
+        sync: false
+      # APP_URL is deliberately not asked for: the app uses the request's own
+      # origin for Stripe return links and OAuth redirects, so a demo needs
+      # nothing. Add it by hand only behind a proxy or on a custom domain.
+      #
+      # A public demo should come up working on a brand-new database: create the
+      # tables, and load seed/demo.sql the first time (only when there are no
+      # accounts, so it never overwrites anything). Set DEMO_AUTOSEED to 0 for a
+      # deployment that will hold real golf days.
+      - key: AUTO_PUSH_SCHEMA
+        value: "1"
+      - key: DEMO_AUTOSEED
+        value: "1"
+      # Handicap lookups stay against the built-in stand-in data: the live WHS /
+      # GHIN APIs need a federation partnership. See docs/INTEGRATIONS.md.
+      - key: GOLF_ENGLAND_MODE
+        value: mock
+      - key: NODE_VERSION
+        value: 22.22.3
