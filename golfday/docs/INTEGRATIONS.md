@@ -249,6 +249,14 @@ token caching, 404-vs-error behaviour and payload mapping are pinned by
 the society page is the live confirmation, and it should be pressed before the
 first competition that depends on it.
 
+### a1b) Other countries
+
+Which countries run the same kind of system, who operates it, and what connecting to each
+one would take: [`HANDICAP-SYSTEMS.md`](HANDICAP-SYSTEMS.md). In short, most of the world
+is on the World Handicap System and a handful of platforms (DotGolf, GolfBox, GHIN, Golf
+Canada, Golf Australia); anything that can answer `GET {base}/golfers/{id}` can be wired in
+today with the custom endpoint below.
+
 ### a2) CDH proxy provider
 
 For a club whose software can expose a small REST endpoint, the contract is

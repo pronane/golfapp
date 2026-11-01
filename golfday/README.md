@@ -17,7 +17,9 @@ golfday/
 ├── scripts          # db push + demo seed
 ├── tests            # vitest unit tests (scoring, scrambles, seasons, refunds, permissions)
 ├── demo             # demo videos (narrated), recorder + mix scripts, cue sheets
-└── docs             # hosting + integrations notes, screenshots
+├── install          # the macOS/Linux and Windows installers + shared setup
+├── e2e              # the browser click-through (npm run e2e)
+└── docs             # install, hosting, integrations, handicaps around the world, screenshots
 ```
 
 ---
@@ -31,6 +33,29 @@ whoever deploys and maintains the app.
 
 ## Quick start
 
+### The one-command install (macOS, Linux, Windows)
+
+```bash
+# macOS / Linux
+./install/install.sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File install\install.ps1
+```
+
+It checks the machine for Node.js 20+ and installs a private copy if it is missing
+(no admin rights, nothing system-wide), installs the dependencies, writes `.env` with a
+generated `AUTH_SECRET`, creates the SQLite database and applies the schema from source,
+seeds the demo, writes the start launchers, builds, and then **drives a real browser
+through a complete golf day** as a final proof (15 steps: register, create a society,
+create a day in the wizard, fill the field, allocate groups, score a card, watch the live
+board). Screenshots of every step land in `e2e/artifacts/`.
+
+Then: `./start-golfday.sh` (or `start-golfday.cmd`) and open <http://localhost:3000>.
+Full details, flags and troubleshooting: [`docs/INSTALL.md`](docs/INSTALL.md).
+
+### By hand
+
 ```bash
 cd golfday
 npm install
@@ -38,6 +63,9 @@ cp .env.example .env          # then set AUTH_SECRET (openssl rand -base64 48)
 npm run db:reset              # creates data/golfday.db, applies schema, seeds a demo
 npm run dev                   # http://localhost:3000
 ```
+
+There is no database server to run: storage is libSQL/SQLite - one file, applied from
+`src/db/schema.sql` by `npm run db:push`.
 
 Demo accounts (all use the password `golfday123`):
 
@@ -53,7 +81,9 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # 121 unit tests
+npm test           # 122 unit tests
+npm run e2e        # the browser click-through (own database, own server)
+npm run setup      # env + schema + launchers + checks, no browser run
 ```
 
 ---
@@ -140,7 +170,9 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   with AES-256-GCM, never returned to a browser, and a **Test lookup** button proves the
   integration before a competition. An overseas answer marks the index verified; a
   lookup that cannot run reports 409/502/504 rather than pretending nobody was found.
-  See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
+  See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md), and
+  [`docs/HANDICAP-SYSTEMS.md`](docs/HANDICAP-SYSTEMS.md) for which other countries run the
+  same kind of system and what connecting to each one takes.
 * **Seasons and the order of merit** (`/seasons/<slug>`) - attach fixtures to a season and
   the table builds itself from the live boards. Positions score 100-90-80-75… down the
   field (or sum Stableford points instead), ties share the position, and a **best-N**
