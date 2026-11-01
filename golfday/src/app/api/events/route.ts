@@ -9,12 +9,20 @@ import { createEventSchema, validate } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
 
+/** Strip the organiser-only bits (join code) from an event before it goes public. */
+function publicEvent<T extends { joinCode: string }>(event: T): Omit<T, "joinCode"> {
+  const { joinCode: _joinCode, ...rest } = event;
+  return rest;
+}
+
 export const GET = route(async (request: Request) => {
   const scope = new URL(request.url).searchParams.get("scope") ?? "public";
   const user = await getCurrentUser();
   if (scope === "public") {
+    // Never hand out join codes on a public endpoint: the code is the organiser's
+    // to share, and publishing it would let anyone add themselves to a field.
     const rows = await listPublicEvents();
-    return json({ events: rows });
+    return json({ events: rows.map(({ event, playerCount }) => ({ event: publicEvent(event), playerCount })) });
   }
   if (!user) return json({ events: [] });
   if (scope === "mine") {
@@ -32,7 +40,7 @@ export const GET = route(async (request: Request) => {
     .where(and(ne(events.status, "CANCELLED"), eq(events.isPublic, true)))
     .orderBy(desc(events.date))
     .limit(50);
-  return json({ events: rows });
+  return json({ events: rows.map(publicEvent) });
 });
 
 /** Anyone signed in can create an event - they become its owner/admin. */
