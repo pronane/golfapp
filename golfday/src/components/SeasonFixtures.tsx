@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { formatEventDate } from "@/lib/format";
 
-type Fixture = { id: string; slug: string; name: string; date: string; courseName: string | null; status: string };
+type Fixture = {
+  id: string;
+  slug: string;
+  name: string;
+  date: string;
+  courseName: string | null;
+  status: string;
+  /** Dated outside the season: listed, but it cannot score. */
+  outside?: boolean;
+};
 
 /**
  * Which golf days count towards a season. Managers pick from the days they run;
@@ -59,6 +68,8 @@ export function SeasonFixtures({ seasonId, fixtures, canManage }: { seasonId: st
           status: e.status,
         })),
       );
+      // The list comes back from the API without the season window, so the
+      // next full render (router.refresh) re-derives the warning.
       setSelected("");
       router.refresh();
     }
@@ -98,6 +109,7 @@ export function SeasonFixtures({ seasonId, fixtures, canManage }: { seasonId: st
               </Link>
               <div className="text-[11.5px] text-ink/45">
                 {fixture.courseName ?? "Course TBC"} · {fixture.status.toLowerCase().replace(/_/g, " ")}
+                {fixture.outside ? " · outside the season, so it does not score" : ""}
               </div>
             </div>
             <Link href={`/live/${fixture.slug}`} className="text-[12px] font-semibold text-fairway-700 hover:underline">

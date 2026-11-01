@@ -285,10 +285,14 @@ export async function detachEventFromSeason(seasonId: string, eventId: string) {
  * an order of merit (each team member earns the team's position).
  */
 export async function loadSeasonFixtures(seasonId: string): Promise<SeasonFixtureResult[]> {
+  const season = await getSeasonById(seasonId);
   const fixtures = await listSeasonFixtures(seasonId);
   const out: SeasonFixtureResult[] = [];
   for (const event of fixtures) {
     if (event.status === "DRAFT" || event.status === "CANCELLED") continue;
+    // The season's dates are a real rule, not decoration: a golf day played
+    // outside the window is on the fixture list but cannot score in the table.
+    if (season && (event.date < season.startsOn || event.date > season.endsOn)) continue;
     const board = await buildLeaderboard(event.id);
     if (!board) continue;
     const holesInCard = board.holes.length || 18;
@@ -335,6 +339,11 @@ export async function loadSeasonFixtures(seasonId: string): Promise<SeasonFixtur
     });
   }
   return out;
+}
+
+/** True when a fixture falls outside the season's dates (listed, but not scored). */
+export function isOutsideSeason(season: Pick<SeasonRecord, "startsOn" | "endsOn">, date: string): boolean {
+  return date < season.startsOn || date > season.endsOn;
 }
 
 export async function getOrderOfMerit(season: SeasonRecord): Promise<OrderOfMerit> {
