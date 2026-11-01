@@ -33,6 +33,8 @@ export async function GET() {
     try {
       // The demo is only useful if somebody has pushed the schema; an empty
       // database shows "no such table" here and a friendly "run db:push" below.
+      // (`AUTO_PUSH_SCHEMA=1` / `DEMO_AUTOSEED=1` make the app do that itself at
+      // boot - see src/lib/bootstrap.ts.)
       const res = await client.execute("select count(*) as n from players");
       players = Number(res.rows[0]?.n ?? 0);
       schema = players > 0 ? "ready" : "empty";

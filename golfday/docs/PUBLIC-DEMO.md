@@ -30,9 +30,26 @@ The app itself needs **a server + a SQL database**, which is two free accounts:
 Pick one row from each column. The fastest to a working link is **Turso + Vercel**; the one with
 the fewest strings attached for a demo you might later use commercially is **Turso + Render**.
 
+## The ten-minute version
+
+1. **Turso** → *Create Database* → `golfday-demo` → copy the `libsql://` URL and create a token.
+2. **Render** → *New → Blueprint* → pick this repository → **leave Blueprint Path blank** (the
+   `render.yaml` at the repository root is the blueprint; it builds `golfday/`).
+3. Paste the three values it asks for: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `AUTH_SECRET`
+   (`openssl rand -base64 48`). Deploy.
+4. Open `https://<service>.onrender.com` — the app creates its own tables and loads the demo day
+   on the first boot (`AUTO_PUSH_SCHEMA=1`, `DEMO_AUTOSEED=1` in the blueprint), so there is no
+   `db:push` step and nothing to run locally. Sign in with `admin@golfday.app` / `golfday123`.
+
+`https://<service>.onrender.com/api/health` should say `{"ok":true,"db":"up","schema":"ready","players":18}`.
+The rest of this page is the same thing with the reasoning, plus the options that are not Render.
+
 ---
 
 ## 1. The database: Turso (5 minutes)
+
+You can do all of this in the dashboard at [app.turso.tech](https://app.turso.tech) - *Create
+Database*, then *Create Token* - and skip the CLI entirely. The CLI equivalent:
 
 ```bash
 curl -sSfL https://get.tur.so/install.sh | bash   # or: brew install tursodatabase/tap/turso
@@ -41,6 +58,11 @@ turso db create golfday-demo lhr                   # lhr, fra, iad ... pick a re
 turso db show golfday-demo --url                   # → libsql://golfday-demo-<org>.turso.io
 turso db tokens create golfday-demo                # → DATABASE_AUTH_TOKEN (copy it once)
 ```
+
+**On Render you can skip this section entirely** - the blueprint sets `AUTO_PUSH_SCHEMA=1` and
+`DEMO_AUTOSEED=1`, so the first boot creates the tables and loads `seed/demo.sql` itself. Fill the
+database by hand when you are deploying somewhere else (Vercel, Cloudflare, your own box), or when
+you want to reset a demo that strangers have been playing with:
 
 Then fill it, either from a checkout of this repository:
 
@@ -74,17 +96,22 @@ Check it worked: `turso db shell golfday-demo "select count(*) from players"` sh
 
 ## 2. The app: Render (free, sleeping)
 
-This repository carries a blueprint: **`golfday/render.yaml`**.
+This repository carries a blueprint at the root: **`render.yaml`** (it builds `golfday/`, and the
+app bootstraps its own database - see `src/lib/bootstrap.ts`).
 
-1. Render dashboard → **New → Blueprint** → pick `pronane/golfapp`. It reads `render.yaml`
-   (root directory `golfday`, `npm ci && npm run build`, health check `/api/health`).
+1. Render dashboard → **New → Blueprint** → pick `pronane/golfapp`. Leave **Blueprint Path**
+   blank: it reads `render.yaml` from the repository root (root directory `golfday`,
+   `npm ci --include=dev && npm run build`, health check `/api/health`).
 2. Fill in the three secrets it asks for:
    - `DATABASE_URL` - the `libsql://` URL
    - `DATABASE_AUTH_TOKEN` - the Turso token
    - `AUTH_SECRET` - `openssl rand -base64 48` (the app refuses to boot in production without a
      real one, because a guessable secret lets anybody forge a login cookie)
-   - `APP_URL` - `https://<your-service>.onrender.com` (returns from Stripe/OAuth; nothing else)
-3. Deploy. First build takes a few minutes.
+
+   `APP_URL` is not asked for: Stripe return links and OAuth redirects use the request's own
+   origin. Set it by hand only behind a proxy or on a custom domain.
+3. Deploy. First build takes a few minutes, and the first boot prints
+   `[bootstrap] schema+seed - 18 players` in the logs.
 
 Free-service behaviour, so nobody is surprised: it **sleeps after 15 minutes without traffic**
 and takes ~30-60 seconds to wake (the visitor sees Render's loading page), it gets 750 instance
@@ -114,6 +141,20 @@ Cloudflare instead.
 HTTP) or move to D1 and swap the driver in `src/db/client.ts`. Free tier: 100k requests/day, no
 egress charges, commercial use allowed. More setup than the two above - see the alternative
 section in `docs/HOSTING.md`.
+
+## 2b. What "the app sets itself up" means
+
+Two switches, both set in the blueprint and both off by default:
+
+| Variable | What it does | Safe to leave on? |
+| --- | --- | --- |
+| `AUTO_PUSH_SCHEMA=1` | On boot, if the `users` table is missing, apply `src/db/schema.sql` (idempotent DDL) | Yes - it only ever creates |
+| `DEMO_AUTOSEED=1` | ...and if the database has **no accounts at all**, load `seed/demo.sql` | Yes for a demo - it never runs on a database that has any accounts |
+
+Nothing here deletes anything, which is why *resetting* a demo is still a deliberate act (next
+section) rather than something a restart can do by accident. For a deployment that will hold real
+golf days, set `DEMO_AUTOSEED=0` (and probably `AUTO_PUSH_SCHEMA=0`, running `npm run db:push`
+yourself).
 
 ## 3. A demo that can be reset
 
