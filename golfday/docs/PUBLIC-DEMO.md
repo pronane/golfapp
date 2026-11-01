@@ -35,8 +35,9 @@ the fewest strings attached for a demo you might later use commercially is **Tur
 1. **Turso** → *Create Database* → `golfday-demo` → copy the `libsql://` URL and create a token.
 2. **Render** → *New → Blueprint* → pick this repository → **leave Blueprint Path blank** (the
    `render.yaml` at the repository root is the blueprint; it builds `golfday/`).
-3. Paste the three values it asks for: `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `AUTH_SECRET`
-   (`openssl rand -base64 48`). Deploy.
+3. Paste the two values it asks for - `DATABASE_URL` and `DATABASE_AUTH_TOKEN`, both from the Turso
+   dashboard. (`AUTH_SECRET` is not asked for: the blueprint uses `generateValue: true`, so Render
+   invents a 256-bit secret itself.) Deploy.
 4. Open `https://<service>.onrender.com` — the app creates its own tables and loads the demo day
    on the first boot (`AUTO_PUSH_SCHEMA=1`, `DEMO_AUTOSEED=1` in the blueprint), so there is no
    `db:push` step and nothing to run locally. Sign in with `admin@golfday.app` / `golfday123`.
@@ -102,14 +103,19 @@ app bootstraps its own database - see `src/lib/bootstrap.ts`).
 1. Render dashboard → **New → Blueprint** → pick `pronane/golfapp`. Leave **Blueprint Path**
    blank: it reads `render.yaml` from the repository root (root directory `golfday`,
    `npm ci --include=dev && npm run build`, health check `/api/health`).
-2. Fill in the three secrets it asks for:
-   - `DATABASE_URL` - the `libsql://` URL
-   - `DATABASE_AUTH_TOKEN` - the Turso token
-   - `AUTH_SECRET` - `openssl rand -base64 48` (the app refuses to boot in production without a
-     real one, because a guessable secret lets anybody forge a login cookie)
+2. Fill in the two secrets it asks for:
+   - `DATABASE_URL` - the `libsql://` URL, from the Turso dashboard
+   - `DATABASE_AUTH_TOKEN` - the Turso token (Turso dashboard -> your database -> **Tokens** ->
+     **Create Token**, or `turso db tokens create golfday-demo`)
 
-   `APP_URL` is not asked for: Stripe return links and OAuth redirects use the request's own
-   origin. Set it by hand only behind a proxy or on a custom domain.
+   `AUTH_SECRET` is **not** asked for: the blueprint declares it with `generateValue: true`, so
+   Render invents a random 256-bit value at provision time and it never touches git, a terminal,
+   or a chat window. `APP_URL` is not asked for either: Stripe return links and OAuth redirects use
+   the request's own origin. Set it by hand only behind a proxy or on a custom domain.
+
+   To rotate `AUTH_SECRET` later, generate a new value and paste it in the service's Environment
+   tab (`openssl rand -base64 48`, or any 32+ character random string). Rotating it signs everybody
+   out, which is the point of rotating it.
 3. Deploy. First build takes a few minutes, and the first boot prints
    `[bootstrap] schema+seed - 18 players` in the logs.
 
@@ -117,6 +123,13 @@ Free-service behaviour, so nobody is surprised: it **sleeps after 15 minutes wit
 and takes ~30-60 seconds to wake (the visitor sees Render's loading page), it gets 750 instance
 hours a month (enough for one service used during working hours), and it has no persistent disk -
 which is exactly why the database is Turso and not a file.
+
+### What URL do I get?
+
+The blueprint names the service `golfday-demo`, so the URL is
+**`https://golfday-demo.onrender.com`** - unless that name is already taken, in which case Render
+adds a suffix (for example `golfday-demo-ab12.onrender.com`) and says so on the service page. The
+address is at the top of the service's dashboard page, under its name, with a copy button.
 
 ### Or: Vercel Hobby (free, instant)
 

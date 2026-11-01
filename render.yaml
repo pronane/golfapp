@@ -22,17 +22,21 @@ services:
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
-      # Fill these in when Render asks (sync: false = the value never lives in
-      # this file). DATABASE_URL is the libsql:// URL; the token is that
-      # database's password - treat it like one.
+      # Render asks for these two when you create the Blueprint (sync: false =
+      # the value never lives in this file). DATABASE_URL is the libsql:// URL
+      # from the Turso dashboard; the token is that database's password - treat
+      # it like one.
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_AUTH_TOKEN
         sync: false
-      # openssl rand -base64 48 - the app refuses to boot in production without
-      # a real one, because a guessable secret lets anybody forge a login.
+      # generateValue: Render invents a base64-encoded 256-bit value (44 chars)
+      # at provision time, so there is nothing to open a terminal for - and it
+      # never appears in this file or in a chat. The app refuses to boot in
+      # production on a secret that is missing, short, or a placeholder, because
+      # a guessable one lets anybody forge a login cookie.
       - key: AUTH_SECRET
-        sync: false
+        generateValue: true
       # APP_URL is deliberately not asked for: the app uses the request's own
       # origin for Stripe return links and OAuth redirects, so a demo needs
       # nothing. Add it by hand only behind a proxy or on a custom domain.
