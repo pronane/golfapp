@@ -7,12 +7,35 @@ import { FlagMark } from "./Icons";
 
 type Mode = "login" | "register";
 
-export function AuthForm({ mode }: { mode: Mode }) {
+const SIGN_IN_ERRORS: Record<string, string> = {
+  provider_unavailable: "That sign-in provider is not configured on this server.",
+  sign_in_cancelled: "That sign-in was cancelled.",
+  sign_in_expired: "That sign-in took too long - please try again.",
+  sign_in_state_mismatch: "That sign-in could not be verified. Please try again.",
+  sign_in_no_code: "The provider did not return an authorisation code.",
+  sign_in_failed: "That sign-in did not complete. Please try again.",
+  oauth_unverified_email:
+    "That account did not share a verified email address, so it cannot be matched to a GolfDay account. Sign in with email and password instead.",
+  oauth_provider_conflict: "That email already signs in with a different provider.",
+};
+
+export function AuthForm({
+  mode,
+  providers = [],
+}: {
+  mode: Mode;
+  providers?: { id: string; label: string }[];
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/dashboard";
+  const paramError = params.get("error");
+  const paramDetail = params.get("detail");
+  const [socialError] = useState<string | null>(
+    paramError ? paramDetail || SIGN_IN_ERRORS[paramError] || "That sign-in did not complete." : null,
+  );
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(socialError);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -63,7 +86,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
     if (!form.golfEnglandId) return;
     setLookup("Looking up…");
     const res = await fetch(`/api/golfengland/search?id=${encodeURIComponent(form.golfEnglandId)}`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.player) {
+      setLookup(data.notice ?? data.error ?? "No golfer found for that ID");
+      return;
+    }
     if (data.player) {
       setForm((prev) => ({
         ...prev,
@@ -72,8 +99,6 @@ export function AuthForm({ mode }: { mode: Mode }) {
         handicapIndex: String(data.player.handicapIndex),
       }));
       setLookup(`Found ${data.player.name} · HI ${data.player.handicapIndex} · ${data.player.homeClub}`);
-    } else {
-      setLookup("No golfer found for that ID");
     }
   }
 
@@ -155,6 +180,30 @@ export function AuthForm({ mode }: { mode: Mode }) {
             {busy ? "Just a moment…" : mode === "login" ? "Sign in" : "Create account"}
           </button>
         </form>
+
+        {providers.length > 0 && (
+          <div className="mt-5">
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-ink/10" />
+              <span className="text-[11.5px] font-semibold uppercase tracking-wide text-ink/40">or continue with</span>
+              <span className="h-px flex-1 bg-ink/10" />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {providers.map((provider) => (
+                <a
+                  key={provider.id}
+                  href={`/api/auth/oauth/${provider.id}/start?next=${encodeURIComponent(next)}`}
+                  className="btn-secondary btn-sm flex-1 justify-center whitespace-nowrap"
+                >
+                  {provider.label}
+                </a>
+              ))}
+            </div>
+            <p className="mt-2 text-[11.5px] text-ink/45">
+              First time? A social sign-in creates your player account with the email that provider shares.
+            </p>
+          </div>
+        )}
 
         <p className="mt-4 text-center text-[13px] text-ink/55">
           {mode === "login" ? (

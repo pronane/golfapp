@@ -16,9 +16,13 @@ export const users = sqliteTable("users", {
   passwordHash: text("password_hash").notNull(),
   // site-wide administrator (can create events for anybody, manage catalogue)
   isSiteAdmin: integer("is_site_admin", { mode: "boolean" }).notNull().default(false),
+  /** Social sign-in: the provider and the subject claim it issued for this user. */
+  oauthProvider: text("oauth_provider"),
+  oauthSubject: text("oauth_subject"),
   createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
 }, (t) => ({
   emailUnique: uniqueIndex("users_email_unique").on(t.email),
+  oauthUnique: uniqueIndex("users_oauth_unique").on(t.oauthProvider, t.oauthSubject),
 }));
 
 /**
@@ -304,6 +308,15 @@ export const societies = sqliteTable("societies", {
   homeClub: text("home_club"),
   joinCode: text("join_code").notNull(),
   createdBy: text("created_by").notNull(),
+  /** Where this club's handicaps come from: MANUAL | DIRECTORY | WHS | CDH. */
+  handicapSource: text("handicap_source").notNull().default("DIRECTORY"),
+  handicapCountry: text("handicap_country").notNull().default("eng"),
+  handicapApiBase: text("handicap_api_base"),
+  handicapApiUsername: text("handicap_api_username"),
+  /** Sealed (AES-256-GCM) - never returned by the API, only written by an owner. */
+  handicapApiSecret: text("handicap_api_secret"),
+  handicapClientToken: text("handicap_client_token"),
+  handicapUpdatedAt: text("handicap_updated_at"),
   createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
 }, (t) => ({
   slugUnique: uniqueIndex("societies_slug_unique").on(t.slug),

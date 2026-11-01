@@ -72,6 +72,29 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
   const [eventToAdd, setEventToAdd] = useState("");
   const [loadingEvents, setLoadingEvents] = useState(false);
 
+  // Handicap integration (owner / secretary only)
+  const [integration, setIntegration] = useState<{
+    source: "MANUAL" | "DIRECTORY" | "WHS" | "CDH";
+    country: string;
+    apiBase: string;
+    username: string;
+    hasSecret: boolean;
+    hasClientToken: boolean;
+    secretMask: string | null;
+    updatedAt: string | null;
+  } | null>(null);
+  const [integrationForm, setIntegrationForm] = useState({
+    source: "DIRECTORY" as "MANUAL" | "DIRECTORY" | "WHS" | "CDH",
+    country: "eng",
+    apiBase: "",
+    username: "",
+    secret: "",
+    clientToken: "",
+  });
+  const [integrationDetail, setIntegrationDetail] = useState<string | null>(null);
+  const [testId, setTestId] = useState("");
+  const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
+
   // Roster search
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ id: string; name: string; handicapIndex: number; homeClub: string | null }[]>([]);
@@ -196,6 +219,94 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
       setNotice(`${name} is off the roster.`);
       router.refresh();
     }
+    setBusy(null);
+  }
+
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch(`/api/societies/${society.id}/integration`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      if (!data?.integration || cancelled) return;
+      setIntegration(data.integration);
+      setIntegrationForm((prev) => ({
+        ...prev,
+        source: data.integration.source,
+        country: data.integration.country,
+        apiBase: data.integration.apiBase,
+        username: data.integration.username,
+        secret: "",
+        clientToken: "",
+      }));
+      setIntegrationDetail(data.provider?.detail ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage, society.id]);
+
+  async function saveIntegration(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy("integration");
+    setError(null);
+    setTestResult(null);
+    const res = await fetch(`/api/societies/${society.id}/integration`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: integrationForm.source,
+        country: integrationForm.country,
+        apiBase: integrationForm.apiBase,
+        username: integrationForm.username,
+        // Only send credentials that were actually typed, so a blank field
+        // never wipes a saved key by accident.
+        ...(integrationForm.secret ? { secret: integrationForm.secret } : {}),
+        ...(integrationForm.clientToken ? { clientToken: integrationForm.clientToken } : {}),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) setError(data.error ?? "Couldn't save those settings");
+    else {
+      setIntegration(data.integration);
+      setIntegrationForm((prev) => ({ ...prev, secret: "", clientToken: "" }));
+      setIntegrationDetail(data.provider?.detail ?? null);
+      setNotice("Handicap settings saved.");
+      router.refresh();
+    }
+    setBusy(null);
+  }
+
+  async function clearCredential(field: "secret" | "clientToken") {
+    setBusy("integration");
+    setError(null);
+    const res = await fetch(`/api/societies/${society.id}/integration`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: "" }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) setError(data.error ?? "Couldn't clear that credential");
+    else {
+      setIntegration(data.integration);
+      setIntegrationDetail(data.provider?.detail ?? null);
+      setNotice("Credential removed.");
+    }
+    setBusy(null);
+  }
+
+  async function testIntegration() {
+    if (!testId.trim()) return;
+    setBusy("test");
+    setTestResult(null);
+    const res = await fetch(`/api/societies/${society.id}/integration`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ golferId: testId.trim() }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setTestResult({ ok: Boolean(data.ok), detail: data.detail ?? data.error ?? "No answer from the provider" });
     setBusy(null);
   }
 
@@ -459,6 +570,170 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
             </div>
           )}
         </section>
+
+        {canManage && (
+          <section className="card overflow-hidden lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/[0.06] px-5 py-3.5">
+              <div>
+                <h2 className="text-[15px] font-bold">Handicaps</h2>
+                <p className="text-[11.5px] text-ink/50">Where this club's handicap indexes come from.</p>
+              </div>
+              {integration && (
+                <span className={`pill ${integration.source === "DIRECTORY" || integration.source === "MANUAL" ? "bg-ink/[0.04] text-ink/60 ring-ink/10" : "bg-fairway-50 text-fairway-800 ring-fairway-200"}`}>
+                  {integration.source === "MANUAL" ? "Manual" : integration.source === "DIRECTORY" ? "Directory" : integration.source}
+                </span>
+              )}
+            </div>
+
+            <form onSubmit={saveIntegration} className="space-y-3 px-5 py-4">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  { value: "MANUAL" as const, label: "Typed in by hand", blurb: "No external lookups." },
+                  { value: "DIRECTORY" as const, label: "GolfDay directory", blurb: "Players already here. No keys." },
+                  { value: "WHS" as const, label: "National WHS database", blurb: "England, Scotland, Wales, Ireland." },
+                  { value: "CDH" as const, label: "Our own CDH endpoint", blurb: "GET {base}/golfers/{id}." },
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex cursor-pointer items-start gap-2 rounded-xl border p-2.5 text-[12.5px] ${
+                      integrationForm.source === option.value ? "border-fairway-300 bg-fairway-50/60" : "border-ink/10 hover:bg-ink/[0.02]"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="handicap-source"
+                      className="mt-0.5"
+                      value={option.value}
+                      checked={integrationForm.source === option.value}
+                      onChange={() => setIntegrationForm((prev) => ({ ...prev, source: option.value }))}
+                    />
+                    <span>
+                      <span className="block font-semibold">{option.label}</span>
+                      <span className="block text-[11px] text-ink/50">{option.blurb}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              {(integrationForm.source === "WHS" || integrationForm.source === "CDH") && (
+                <div className="grid gap-2 rounded-xl bg-ink/[0.02] p-3 sm:grid-cols-2">
+                  {integrationForm.source === "WHS" && (
+                    <div>
+                      <label className="label" htmlFor="handicap-country">National union</label>
+                      <select
+                        id="handicap-country"
+                        className="select"
+                        value={integrationForm.country}
+                        onChange={(e) => setIntegrationForm((prev) => ({ ...prev, country: e.target.value }))}
+                      >
+                        <option value="eng">England Golf</option>
+                        <option value="sco">Scottish Golf</option>
+                        <option value="wal">Wales Golf</option>
+                        <option value="irl">Golf Ireland</option>
+                      </select>
+                    </div>
+                  )}
+                  <div className={integrationForm.source === "CDH" ? "sm:col-span-2" : ""}>
+                    <label className="label" htmlFor="handicap-base">API base URL</label>
+                    <input
+                      id="handicap-base"
+                      className="input font-mono text-[12px]"
+                      placeholder={integrationForm.source === "WHS" ? "https://isvapi.whsplatform.englandgolf.org" : "https://handicaps.example.com/v1"}
+                      value={integrationForm.apiBase}
+                      onChange={(e) => setIntegrationForm((prev) => ({ ...prev, apiBase: e.target.value }))}
+                    />
+                    <p className="mt-1 text-[11px] text-ink/45">
+                      {integrationForm.source === "WHS"
+                        ? "Leave blank for the national platform."
+                        : "Your endpoint must answer GET {base}/golfers/{id} with name and handicap."}
+                    </p>
+                  </div>
+                  {integrationForm.source === "WHS" && (
+                    <div>
+                      <label className="label" htmlFor="handicap-user">Club username</label>
+                      <input
+                        id="handicap-user"
+                        className="input"
+                        value={integrationForm.username}
+                        onChange={(e) => setIntegrationForm((prev) => ({ ...prev, username: e.target.value }))}
+                        placeholder="club login from the union"
+                        autoComplete="off"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="label" htmlFor="handicap-secret">
+                      {integrationForm.source === "WHS" ? "Secret key" : "API key (optional)"}
+                    </label>
+                    <input
+                      id="handicap-secret"
+                      type="password"
+                      className="input"
+                      value={integrationForm.secret}
+                      onChange={(e) => setIntegrationForm((prev) => ({ ...prev, secret: e.target.value }))}
+                      placeholder={integration?.hasSecret ? integration.secretMask ?? "saved" : "not set"}
+                      autoComplete="new-password"
+                    />
+                    <p className="mt-1 text-[11px] text-ink/45">
+                      Stored encrypted. Leave blank to keep the saved key.
+                      {integration?.hasSecret && (
+                        <button type="button" className="ml-1 font-semibold text-rose-700 hover:underline" onClick={() => void clearCredential("secret")}>
+                          Remove
+                        </button>
+                      )}
+                    </p>
+                  </div>
+                  {integrationForm.source === "WHS" && (
+                    <div className="sm:col-span-2">
+                      <label className="label" htmlFor="handicap-token">Client token (JWT) - optional</label>
+                      <input
+                        id="handicap-token"
+                        type="password"
+                        className="input font-mono text-[12px]"
+                        value={integrationForm.clientToken}
+                        onChange={(e) => setIntegrationForm((prev) => ({ ...prev, clientToken: e.target.value }))}
+                        placeholder={integration?.hasClientToken ? "saved" : "paste it if the union issued one"}
+                        autoComplete="new-password"
+                      />
+                      <p className="mt-1 text-[11px] text-ink/45">
+                        Used verbatim when present; otherwise GolfDay signs one with the username and secret.
+                        {integration?.hasClientToken && (
+                          <button type="button" className="ml-1 font-semibold text-rose-700 hover:underline" onClick={() => void clearCredential("clientToken")}>
+                            Remove
+                          </button>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {integrationDetail && <p className="text-[12px] text-ink/55">{integrationDetail}</p>}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="submit" className="btn-primary btn-sm" disabled={busy === "integration"}>
+                  {busy === "integration" ? "Saving…" : "Save handicap settings"}
+                </button>
+                <div className="flex flex-1 items-center gap-2">
+                  <input
+                    className="input h-8 max-w-[190px] text-[12.5px]"
+                    placeholder="CDH / member ID to test"
+                    value={testId}
+                    onChange={(e) => setTestId(e.target.value)}
+                  />
+                  <button type="button" className="btn-secondary btn-sm" disabled={busy === "test" || !testId.trim()} onClick={() => void testIntegration()}>
+                    {busy === "test" ? "Testing…" : "Test lookup"}
+                  </button>
+                </div>
+              </div>
+              {testResult && (
+                <p className={`rounded-lg px-3 py-2 text-[12.5px] ${testResult.ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
+                  {testResult.detail}
+                </p>
+              )}
+            </form>
+          </section>
+        )}
       </div>
     </div>
   );

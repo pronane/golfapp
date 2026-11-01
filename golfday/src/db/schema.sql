@@ -7,9 +7,12 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   is_site_admin INTEGER NOT NULL DEFAULT 0,
+  oauth_provider TEXT,
+  oauth_subject TEXT,
   created_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email);
+CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_unique ON users (oauth_provider, oauth_subject);
 
 CREATE TABLE IF NOT EXISTS players (
   id TEXT PRIMARY KEY,
@@ -246,6 +249,13 @@ CREATE TABLE IF NOT EXISTS societies (
   home_club TEXT,
   join_code TEXT NOT NULL,
   created_by TEXT NOT NULL,
+  handicap_source TEXT NOT NULL DEFAULT 'DIRECTORY',
+  handicap_country TEXT NOT NULL DEFAULT 'eng',
+  handicap_api_base TEXT,
+  handicap_api_username TEXT,
+  handicap_api_secret TEXT,
+  handicap_client_token TEXT,
+  handicap_updated_at TEXT,
   created_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS societies_slug_unique ON societies (slug);
