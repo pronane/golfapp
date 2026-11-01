@@ -284,6 +284,17 @@ behind a session cookie. GitHub can host the **recordings** (`Screenshots site` 
 `node demo/build-gallery.mjs`) and can **fill the demo database** (`Seed the demo database`
 workflow → Turso, on demand or nightly). Both are already wired up.
 
+### The demo database as a file
+
+`seed/demo.sql` is the whole demo day (schema + 649 rows) in one diffable text file, for the hosts
+that would rather be handed a database than a script:
+
+```bash
+turso db shell golfday-demo < seed/demo.sql   # build or reset a Turso database
+npm run seed:import                            # …or whatever DATABASE_URL points at
+npm run seed:dump                              # regenerate it from a seeded database
+```
+
 Health check: `GET /api/health` reports `{ ok, db, schema, players }` - it is what the Render
 blueprint in [`render.yaml`](render.yaml) watches, and the first thing to read when a fresh deploy
 shows an empty site (`schema: "empty"` means `npm run db:push` has not been run against that

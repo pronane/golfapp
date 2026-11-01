@@ -211,7 +211,11 @@ CREATE TABLE IF NOT EXISTS event_payments (
   method TEXT NOT NULL DEFAULT 'MANUAL',
   amount_pence INTEGER NOT NULL DEFAULT 0,
   stripe_session_id TEXT,
+  stripe_payment_intent TEXT,
   paid_at TEXT,
+  -- refunds are recorded against the entry, so "how much is left" is arithmetic
+  refunded_pence INTEGER NOT NULL DEFAULT 0,
+  refunded_at TEXT,
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS event_payment_unique ON event_payments (event_id, player_id);
