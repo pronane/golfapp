@@ -6,6 +6,11 @@
 | [`golfday-product-tour.webm`](golfday-product-tour.webm) | 1:25 | The whole product: landing page and live leaderboard, sign in, player dashboard, the organiser console (field, groups, card, admins), the course library, the three-step "create a golf day" wizard, and a player signing up with their Golf England ID |
 | [`golfday-live-scoring.webm`](golfday-live-scoring.webm) | 0:49 | Two screens side by side: a four-ball entering scores on a phone and the clubhouse leaderboard updating live, including a correction |
 
+`npm run gallery` (or `node demo/build-gallery.mjs`) turns the stills above and these three films into
+one static page, `demo/gallery/index.html` - the thing GitHub Pages publishes (`.github/workflows/pages.yml`).
+It is a recording, not the app: see [`../docs/PUBLIC-DEMO.md`](../docs/PUBLIC-DEMO.md) for why GitHub cannot run
+the server half, and for the free way to get a link where people can actually sign up.
+
 All three are **1440×900 VP9/Opus WebM with English narration and burned-in captions**. They play in
 every current browser. To convert to MP4/H.264 for WhatsApp or social:
 
