@@ -1,0 +1,40 @@
+# A free, public demo of GolfDay on Render.
+#
+# Render's free web service needs no card and allows non-commercial use, which
+# suits a demo other people can try. The trade-offs are real and documented in
+# docs/PUBLIC-DEMO.md: the service sleeps after 15 minutes idle (the first
+# visitor waits ~30-60 s), and it has no persistent disk, so the database must
+# live elsewhere - Turso's free tier holds it (set DATABASE_URL and
+# DATABASE_AUTH_TOKEN below).
+#
+# How to use: Render dashboard -> New -> Blueprint -> pick this repository.
+# Root directory: golfday.
+services:
+  - type: web
+    name: golfday-demo
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: golfday
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Set these in the Render dashboard (Blueprint "sync: false" = do not
+      # store the value in this file).
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_AUTH_TOKEN
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      # The demo's sign-in page lists the seeded accounts; keep it on.
+      - key: APP_URL
+        sync: false
+      # Handicap lookups run against the built-in mock unless a federation
+      # issues credentials (see docs/INTEGRATIONS.md). Keep it mocked in public.
+      - key: GOLF_ENGLAND_MODE
+        value: mock
+      - key: NODE_VERSION
+        value: 22.22.3

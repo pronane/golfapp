@@ -1,0 +1,58 @@
+# Publishes the films and screenshots to GitHub Pages.
+#
+# This is the only part of GolfDay GitHub can host by itself: a static page of
+# recordings. The app itself needs a server (sign-in, sign-up, score writes), so
+# it lives on Render or Vercel with a Turso database - see docs/PUBLIC-DEMO.md.
+#
+# One-time setup: Settings -> Pages -> Build and deployment -> Source: GitHub
+# Actions.
+name: Screenshots site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "golfday/docs/screenshots/**"
+      - "golfday/demo/golfday-*.webm"
+      - "golfday/demo/build-gallery.mjs"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build the gallery
+        working-directory: golfday
+        run: node demo/build-gallery.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: golfday/demo/gallery
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

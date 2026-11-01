@@ -274,3 +274,5 @@ Next month you repeat from step 4: the society, roster and handicap settings sta
 More detail on the plumbing (course API, WHS, overseas providers, Stripe, hosting) is in
 [`INTEGRATIONS.md`](INTEGRATIONS.md), [`HOSTING.md`](HOSTING.md) and
 [`SIGN-IN.md`](SIGN-IN.md).
+
+Want to put a demo online for other people to poke at, free? [`PUBLIC-DEMO.md`](PUBLIC-DEMO.md).

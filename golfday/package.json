@@ -14,7 +14,8 @@
     "e2e": "node e2e/full-journey.mjs",
     "e2e:friends": "node e2e/friends-journey.mjs",
     "lint": "next lint",
-    "setup": "node install/setup.mjs all"
+    "setup": "node install/setup.mjs all",
+    "gallery": "node demo/build-gallery.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
@@ -39,5 +40,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20.9"
   }
 }

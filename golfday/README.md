@@ -19,7 +19,7 @@ golfday/
 ├── demo             # demo videos (narrated), recorder + mix scripts, cue sheets
 ├── install          # the macOS/Linux and Windows installers + shared setup
 ├── e2e              # the browser click-through (npm run e2e)
-└── docs             # install, hosting, integrations, handicaps around the world, screenshots
+└── docs             # install, hosting/public demo, integrations, handicaps around the world, screenshots
 ```
 
 ---
@@ -266,7 +266,25 @@ logging in.
 
 ## Free hosting
 
-Short version: **Vercel (Hobby) + Turso (free)**, or **Cloudflare Workers/Pages + D1**.
-Full comparison, limits and a step-by-step deploy runbook are in
-[`docs/HOSTING.md`](docs/HOSTING.md). GolfCourseAPI and the Golf England CDH adapter are
-covered in [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
+Short version: **Turso (free database) + Render or Vercel Hobby (free app)**, or **Cloudflare
+Workers/Pages + D1**.
+
+Want a link you can send to strangers, where they can create an account and run a day? That is
+[`docs/PUBLIC-DEMO.md`](docs/PUBLIC-DEMO.md) - about fifteen minutes, £0/month, and it is honest
+about what is mocked on a public demo (the federation handicap lookups unless you hold WHS
+credentials, and card payments unless you add Stripe keys).
+
+[`docs/HOSTING.md`](docs/HOSTING.md) has the provider-by-provider comparison; GolfCourseAPI and the
+Golf England CDH adapter are covered in [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
+
+### GitHub, specifically
+
+GitHub Pages cannot host the app - it serves files, and sign-up/sign-in/score entry are writes
+behind a session cookie. GitHub can host the **recordings** (`Screenshots site` workflow →
+`node demo/build-gallery.mjs`) and can **fill the demo database** (`Seed the demo database`
+workflow → Turso, on demand or nightly). Both are already wired up.
+
+Health check: `GET /api/health` reports `{ ok, db, schema, players }` - it is what the Render
+blueprint in [`render.yaml`](render.yaml) watches, and the first thing to read when a fresh deploy
+shows an empty site (`schema: "empty"` means `npm run db:push` has not been run against that
+database).

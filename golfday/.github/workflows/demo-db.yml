@@ -1,0 +1,89 @@
+# Fills (or re-fills) the shared demo database that the public deployment uses.
+#
+# The public demo needs a database with the schema applied and the demo day
+# seeded - and it needs to be able to go back to that state, because anybody who
+# visits can create an account, enter a day and score a card. This workflow runs
+# the same two commands you would run on your laptop, against the same Turso
+# database, from GitHub's runners, so "reset the demo" is one button (or one
+# schedule) rather than a remembered pair of commands.
+#
+# Setup, once, in the repository settings:
+#   Settings -> Secrets and variables -> Actions -> New repository secret
+#     DATABASE_URL         libsql://golfday-<org>.turso.io
+#     DATABASE_AUTH_TOKEN  the Turso token for that database
+#
+# Then: Actions -> "Seed the demo database" -> Run workflow.
+name: Seed the demo database
+
+on:
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "Wipe every row first (removes accounts visitors created)"
+        type: boolean
+        default: true
+  # A public demo collects debris: test accounts, half-built days, cards with
+  # one hole in them. Reset it every night so each morning starts from the
+  # documented demo day. Delete this block if you would rather keep everything.
+  schedule:
+    - cron: "17 4 * * *" # 04:17 UTC
+
+concurrency:
+  group: demo-database
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: golfday
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: golfday/package-lock.json
+
+      - run: npm ci
+
+      - name: Check the database is reachable
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+        run: npx tsx -e 'import { client } from "./src/db/client"; const r = await client.execute("select 1 as ok"); console.log("connected:", r.rows[0]);'
+
+      - name: Apply the schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+        run: npm run db:push
+
+      - name: Seed the demo day
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+          RESET: ${{ github.event_name == 'workflow_dispatch' && inputs.reset || github.event_name == 'schedule' }}
+        run: |
+          if [ "$RESET" = "true" ]; then
+            npm run db:reset
+          else
+            npm run db:seed   # only seeds an empty database
+          fi
+
+      - name: Wake the deployment and check it
+        if: ${{ vars.DEMO_URL != '' }}
+        run: |
+          # A free service is asleep until somebody knocks. Knock twice: the
+          # first request starts it, the second gets the answer.
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 60 "${{ vars.DEMO_URL }}/api/health" || true)
+            echo "attempt $i -> $code"
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
+          cat /tmp/health.json || true
+          grep -q '"schema":"ready"' /tmp/health.json
