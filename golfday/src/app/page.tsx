@@ -207,9 +207,10 @@ export default async function HomePage() {
         <div className="card card-pad">
           <h3 className="text-[15px] font-bold">Built to host for free</h3>
           <p className="mt-1 text-[13.5px] leading-relaxed text-ink/60">
-            Next.js on Vercel&apos;s free tier, a libSQL/SQLite database from Turso&apos;s free tier and no
-            queue or worker services - live updates ride on Server-Sent Events. See
-            <span className="font-medium text-ink/80"> docs/HOSTING.md</span> for the deploy runbook.
+            Next.js on a free host, a libSQL/SQLite database from Turso&apos;s free tier and no queue or
+            worker services - live updates ride on Server-Sent Events. This demo runs on a free Render
+            service; <span className="font-medium text-ink/80">docs/PUBLIC-DEMO.md</span> has the deploy
+            runbook.
           </p>
         </div>
       </section>
