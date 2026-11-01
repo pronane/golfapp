@@ -49,6 +49,13 @@ export type ConsoleRegistration = {
 
 export type ConsoleGroup = { id: string; name: string; teeTime: string | null; token: string };
 export type ConsoleAdmin = { id: string; userId: string; name: string; email: string; role: string };
+export type ConsoleSociety = {
+  name: string;
+  slug: string;
+  joinCode: string;
+  rosterSize: number;
+  missing: { playerId: string; name: string }[];
+};
 
 type Props = {
   event: ConsoleEvent;
@@ -57,6 +64,7 @@ type Props = {
   groups: ConsoleGroup[];
   admins: ConsoleAdmin[];
   isOwner: boolean;
+  society?: ConsoleSociety | null;
 };
 
 const TABS = [
@@ -385,6 +393,54 @@ export function EventConsole(props: Props) {
           </section>
 
           <div className="space-y-4">
+            {props.society && (
+              <section className="card card-pad">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-[15px] font-bold">Society roster</h2>
+                    <p className="mt-1 text-[12.5px] text-ink/55">
+                      {props.society.name} · {props.society.rosterSize} on the roster ·{" "}
+                      {props.registrations.filter((r) => r.registration.status === "REGISTERED").length} entered
+                    </p>
+                  </div>
+                  <Link href={`/societies/${props.society.slug}`} className="btn-ghost btn-sm shrink-0">
+                    Open club
+                  </Link>
+                </div>
+                {props.society.missing.length > 0 ? (
+                  <>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {props.society.missing.map((m) => (
+                        <span key={m.playerId} className="rounded-full bg-ink/[0.06] px-2 py-0.5 text-[11.5px] text-ink/70">
+                          {m.name}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      className="btn-primary btn-sm mt-3 w-full"
+                      disabled={busy}
+                      onClick={async () => {
+                        const added = await call(`/api/events/${props.event.id}/society-roster`, "POST");
+                        if (added) {
+                          const count = added.added?.length ?? 0;
+                          const skipped = added.skipped?.length ?? 0;
+                          flash(
+                            `${count} ${count === 1 ? "player" : "players"} entered from the roster` +
+                              (skipped ? ` · ${skipped} skipped (field full or playing elsewhere)` : ""),
+                          );
+                          router.refresh();
+                        }
+                      }}
+                    >
+                      Enter {props.society.missing.length} from the roster
+                    </button>
+                  </>
+                ) : (
+                  <p className="mt-2 text-[12.5px] text-ink/45">Everyone on the roster is already in the field.</p>
+                )}
+              </section>
+            )}
+
             <section className="card card-pad">
               <h2 className="text-[15px] font-bold">Add a player</h2>
               <input className="input mt-2" placeholder="Search existing players by name, club or GE ID" value={playerQuery} onChange={(e) => setPlayerQuery(e.target.value)} />

@@ -114,7 +114,10 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   secretary and member: owners and secretaries can add fixtures, manage the roster and
   create seasons; members can join and leave. A golf day created from a society page
   lands on that fixture list automatically, and a roster carries guest players who have
-  no login yet.
+  no login yet. The field tab offers the roster in one click - **Enter N from the
+  roster** - so the same regulars do not have to be searched and added one at a time
+  every month (anyone full or already playing that day is skipped and reported, not
+  silently dropped).
 * **Seasons and the order of merit** (`/seasons/<slug>`) - attach fixtures to a season and
   the table builds itself from the live boards. Positions score 100-90-80-75… down the
   field (or sum Stableford points instead), ties share the position, and a **best-N**

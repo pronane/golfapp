@@ -100,6 +100,49 @@ describe("societies", () => {
     expect(await societies.getSocietyForEvent(event.id)).toBeNull();
   });
 
+  it("enters the whole society roster on a fixture in one go", async () => {
+    const secretary = await person("roster-sec@test.local", "Rita Roster", 9);
+    const club = await societies.createSociety({
+      name: "Roster Golf Society",
+      createdBy: secretary.userId,
+      foundedByPlayerId: secretary.playerId,
+    });
+    const regulars = [await person("reg1@test.local", "Reg One", 11), await person("reg2@test.local", "Reg Two", 19)];
+    for (const regular of regulars) await societies.addSocietyMember(club.id, regular.playerId);
+
+    const event = await events.createEvent({
+      name: "Monthly Medal",
+      date: "2027-07-07",
+      createdBy: secretary.userId,
+      status: "OPEN",
+      holes: card,
+      maxPlayers: 3,
+    });
+    await societies.attachEventToSociety(club.id, event.id);
+
+    // The founder is already in the field by hand; the roster offers the rest.
+    await events.registerPlayer({ eventId: event.id, playerId: secretary.playerId });
+    const roster = await societies.getSocietyRosterForEvent(event.id);
+    expect(roster?.members).toHaveLength(3);
+    expect(roster?.missing.map((m) => m.name)).toEqual(["Reg One", "Reg Two"]);
+
+    const first = await events.registerRoster({ eventId: event.id, playerIds: roster!.missing.map((m) => m.playerId) });
+    expect(first.added).toHaveLength(2);
+    expect(first.skipped).toEqual([]);
+    const bundle = await events.getEventBundle(event.id);
+    expect(bundle?.registrations.map((r) => r.player.name).sort()).toEqual(["Reg One", "Reg Two", "Rita Roster"]);
+
+    // Running it again is a no-op, not a duplicate or an error.
+    expect((await societies.getSocietyRosterForEvent(event.id))?.missing).toEqual([]);
+
+    // A full field is reported per player instead of failing the whole call.
+    const extra = await person("reg3@test.local", "Reg Three", 15);
+    await societies.addSocietyMember(club.id, extra.playerId);
+    const second = await events.registerRoster({ eventId: event.id, playerIds: [extra.playerId] });
+    expect(second.added).toEqual([]);
+    expect(second.skipped).toEqual([{ playerId: extra.playerId, name: "Reg Three", reason: "event_full" }]);
+  });
+
   it("counts a scramble fixture in the order of merit, one row per team", async () => {
     const organiser = await person("organiser@test.local", "Olive Organiser", 10);
     const teamA = [

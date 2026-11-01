@@ -10,7 +10,7 @@
  */
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { events, players, seasons, societyEvents, societyMembers, societies } from "@/db/schema";
+import { eventPlayers, events, players, seasons, societyEvents, societyMembers, societies } from "@/db/schema";
 import type { SessionUser } from "./auth";
 import { ApiError } from "./http";
 import { newId, newJoinCode, uniqueSlug } from "./ids";
@@ -171,6 +171,30 @@ export async function listSocietyEvents(societyId: string) {
     .where(eq(societyEvents.societyId, societyId))
     .orderBy(asc(events.date));
   return rows.map((r) => r.event);
+}
+
+/**
+ * The society behind an event, plus who is on its roster and not yet entered.
+ * This is what makes a society worth having: the field is picked from the
+ * roster, not re-typed from the whole player directory every month.
+ */
+export async function getSocietyRosterForEvent(eventId: string) {
+  const society = await getSocietyForEvent(eventId);
+  if (!society) return null;
+  const members = (await listSocietyMembers(society.id)).filter((m) => m.status === "ACTIVE");
+  const entered = new Set(
+    (
+      await db
+        .select({ playerId: eventPlayers.playerId })
+        .from(eventPlayers)
+        .where(eq(eventPlayers.eventId, eventId))
+    ).map((r) => r.playerId),
+  );
+  return {
+    society: { id: society.id, name: society.name, slug: society.slug, joinCode: society.joinCode },
+    members,
+    missing: members.filter((m) => !entered.has(m.playerId)),
+  };
 }
 
 export async function getSocietyForEvent(eventId: string) {
