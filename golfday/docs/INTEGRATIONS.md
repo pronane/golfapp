@@ -1,4 +1,4 @@
-# Integrations: Golf England (WHS) and the course database
+# Integrations: Golf England (WHS), overseas handicaps and the course database
 
 Both integrations are optional. With no keys configured GolfDay still works: it falls back
 to a bundled course catalogue and a mock handicap directory.
@@ -128,6 +128,9 @@ the deployment environment.
 | `MANUAL` | Nothing is looked up; organisers and players type the index in | nothing |
 | `DIRECTORY` | Search players already in GolfDay (the ten-person demo directory) | nothing |
 | `WHS` | The national WHS platform (DotGolf ISV API) | club username + secret, or a client token |
+| `GHIN` | GHIN / USGA (United States) | club login + password (+ token if GHIN issued one) |
+| `GOLF_CANADA` | Golf Canada | club login + password |
+| `GOLF_AUSTRALIA` | Golf Australia / Golf Link | API key |
 | `CDH` | Your own endpoint answering `GET {base}/golfers/{id}` | a URL (+ optional key) |
 
 Set it on the club page → **Handicaps** (owner or secretary only): choose the
@@ -174,7 +177,7 @@ correct behaviour for a leaked secret.
 **Deployment defaults** (used by anyone not in a configured society):
 
 ```env
-GOLF_ENGLAND_MODE="mock"          # mock | whs | cdh
+GOLF_ENGLAND_MODE="mock"          # mock | whs | cdh | ghin | golfcanada | golfaustralia
 WHS_COUNTRY="eng"
 WHS_API_USERNAME=""
 WHS_API_SECRET=""
@@ -183,6 +186,68 @@ WHS_API_SECRET=""
 # CDH_API_BASE="https://api.cdh.example.com/v1"
 # CDH_API_KEY=""
 ```
+
+### a1) Overseas providers: GHIN, Golf Canada, Golf Australia
+
+An overseas member used to be stuck on "declared": their index is official, but
+the national WHS platform does not know them. Nothing about that changes the
+rule that **nobody is required to belong to a club or a union** - a lookup is an
+offer, not a gate - but where a club *does* hold credentials, the same resolver
+can now verify the number instead of taking it on trust.
+
+| Provider | Country | Auth | Lookup |
+| --- | --- | --- | --- |
+| `GHIN` | USA | `POST {base}/golfers/login.json` with `{user:{email_or_ghin,password}, token}`, bearer thereafter | `GET {base}/golfers/{ghin}.json` |
+| `GOLF_CANADA` | CAN | `POST {base}/auth/login` `{username,password}`, bearer thereafter | `GET {base}/golfers/{number}` |
+| `GOLF_AUSTRALIA` | AUS | static API key in `Authorization: Bearer <key>` | `GET {base}/golfers/{GA number}` or `/handicaps/{id}` |
+
+Default bases are `https://api2.ghin.com/api/v1`, `https://api.golfcanada.ca/v1`
+and `https://api.golf.org.au/v1`, every one of which can be overridden on the
+society page - these are partnership/client APIs rather than documented public
+ones, so a provider moving a path is a settings change, not a release.
+
+The adapter (`src/lib/overseas.ts`) is deliberately forgiving in two ways and
+strict in a third:
+
+* **tolerant reads** - the handicap and the name are found wherever they sit in
+  the JSON (`golfer`, `data.golfer_user.golfer`, a one-element array, snake or
+  camel case), so a new wrapper does not need a code change;
+* **candidate paths** - each preset lists the paths that provider's own clients
+  use and they are tried in order; a 404 moves on, so a guess that misses is not
+  an error;
+* **no silent "not found"** - a rejected login or lookup is a 502
+  (`integration_unauthorised`), a 10 s silence is a 504 (`integration_timeout`),
+  and a source with no credentials is a 409 (`integration_not_configured`). If
+  the number comes back empty the index stays *declared*, because a failed
+  lookup must never look like a verification.
+
+Verified provenance is therefore earned: a `GHIN` / `Golf Canada` / `Golf
+Australia` answer records the player as `OVERSEAS` **and** `handicapVerified =
+true`; with no club credentials configured the same player records as declared
+`OVERSEAS` and the organiser sees it.
+
+**Deployment defaults**, if you would rather not configure it per society:
+
+```env
+GOLF_ENGLAND_MODE="ghin"            # mock | whs | cdh | ghin | golfcanada | golfaustralia
+OVERSEAS_GHIN_USERNAME=""           # the club's GHIN login
+OVERSEAS_GHIN_SECRET=""
+# OVERSEAS_GHIN_CLIENT_TOKEN=""     # only if GHIN paired one with the login
+# OVERSEAS_GHIN_API_BASE="https://api2.ghin.com/api/v1"
+
+OVERSEAS_GOLF_CANADA_USERNAME=""
+OVERSEAS_GOLF_CANADA_SECRET=""
+
+OVERSEAS_GOLF_AUSTRALIA_SECRET=""   # the API key is all this one needs
+```
+
+**Unverified here:** these request shapes come from the providers' client
+contracts, and neither the live handshake nor a real golfer's index can be
+exercised from a sandbox with no egress. The request bodies, bearer handling,
+token caching, 404-vs-error behaviour and payload mapping are pinned by
+`tests/overseas.test.ts` against a stubbed `fetch`; the **Test lookup** button on
+the society page is the live confirmation, and it should be pressed before the
+first competition that depends on it.
 
 ### a2) CDH proxy provider
 
@@ -222,7 +287,8 @@ shots received  = f(playingHandicap, stroke index)   // >18 and plus handicaps s
 ```
 
 A player's index is stored on their profile, snapshotted into `event_players` when they
-enter, and can be refreshed from the dashboard ("Refresh from Golf England"). Changing an
+enter, and can be refreshed from the dashboard wherever the source is lookupable (WHS, or
+an overseas system your club has credentials for). Changing an
 event's allowance recalculates every playing handicap in it.
 
 **Compliance note:** a handicap index is personal data. Handicaps are copied into the event

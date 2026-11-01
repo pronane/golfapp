@@ -188,7 +188,11 @@ export function AuthForm({
                 {provenanceMeta(form.handicapSource).wantsId && (
                   <div className="mt-3">
                     <label className="label" htmlFor="ge">
-                      {form.handicapSource === "WHS" ? "Golf England / CDH ID" : "Handicap ID"}
+                      {form.handicapSource === "WHS"
+                        ? "Golf England / CDH ID"
+                        : form.handicapSource === "OVERSEAS"
+                          ? "Overseas handicap number"
+                          : "Handicap ID"}
                     </label>
                     <div className="flex gap-2">
                       <input
@@ -198,7 +202,7 @@ export function AuthForm({
                         onChange={set("golfEnglandId")}
                         placeholder={provenanceMeta(form.handicapSource).notePlaceholder ?? "optional"}
                       />
-                      {form.handicapSource === "WHS" && (
+                      {provenanceMeta(form.handicapSource).lookupable && (
                         <button type="button" className="btn-secondary btn-sm shrink-0" onClick={golfEnglandLookup}>Look up</button>
                       )}
                     </div>
@@ -206,7 +210,9 @@ export function AuthForm({
                       {lookup ??
                         (form.handicapSource === "WHS"
                           ? "We pull your WHS handicap index so organisers do not have to type it."
-                          : "Optional - the number on your handicap record, so an organiser can check it.")}
+                          : form.handicapSource === "OVERSEAS"
+                            ? "We check the number with your country's system (GHIN, Golf Canada, Golf Australia) where your club has an account. Otherwise it stays declared."
+                            : "Optional - the number on your handicap record, so an organiser can check it.")}
                     </p>
                   </div>
                 )}

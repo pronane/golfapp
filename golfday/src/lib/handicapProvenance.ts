@@ -71,9 +71,9 @@ export const PROVENANCES: ProvenanceMeta[] = [
     value: "OVERSEAS",
     label: "Another country's system",
     short: "Overseas",
-    blurb: "GHIN, Golf Canada, Golf Australia and so on. Declared, not verified.",
+    blurb: "GHIN, Golf Canada, Golf Australia and so on. Verified when your society has that system's credentials.",
     official: true,
-    lookupable: false,
+    lookupable: true,
     wantsId: true,
     notePlaceholder: "e.g. GHIN 1234567 (USA)",
   },
@@ -156,6 +156,8 @@ export function verifiedFor(value: string, lookedUp: boolean): boolean {
  */
 export function provenanceFromLookup(source: string): { source: HandicapProvenance; verified: boolean } {
   if (source === "WHS" || source === "GOLF_ENGLAND" || source === "CDH") return { source: "WHS", verified: true };
+  // A real overseas database answered (GHIN, Golf Canada, Golf Australia).
+  if (source === "OVERSEAS") return { source: "OVERSEAS", verified: true };
   return { source: "MANUAL", verified: false };
 }
 

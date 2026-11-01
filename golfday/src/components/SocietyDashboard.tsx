@@ -54,6 +54,16 @@ type Props = {
   isMember: boolean;
 };
 
+/** Overseas systems: same settings fields, different labels. */
+const OVERSEAS_SOURCES = ["GHIN", "GOLF_CANADA", "GOLF_AUSTRALIA"] as const;
+const OVERSEAS_LABELS: Record<string, { label: string; idLabel: string; base: string; keyOnly: boolean }> = {
+  GHIN: { label: "GHIN (USA)", idLabel: "GHIN number", base: "https://api2.ghin.com/api/v1", keyOnly: false },
+  GOLF_CANADA: { label: "Golf Canada", idLabel: "Golf Canada number", base: "https://api.golfcanada.ca/v1", keyOnly: false },
+  GOLF_AUSTRALIA: { label: "Golf Australia (Golf Link)", idLabel: "Golf Link number", base: "https://api.golf.org.au/v1", keyOnly: true },
+};
+const isOverseasSource = (value: string): value is (typeof OVERSEAS_SOURCES)[number] =>
+  (OVERSEAS_SOURCES as readonly string[]).includes(value);
+
 const roleLabel = (role: string) => (role === "OWNER" ? "Owner" : role === "SECRETARY" ? "Secretary" : "Member");
 
 const formatLabel = (format: string) =>
@@ -84,7 +94,7 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
     updatedAt: string | null;
   } | null>(null);
   const [integrationForm, setIntegrationForm] = useState({
-    source: "DIRECTORY" as "MANUAL" | "DIRECTORY" | "WHS" | "CDH",
+    source: "DIRECTORY" as "MANUAL" | "DIRECTORY" | "WHS" | "CDH" | "GHIN" | "GOLF_CANADA" | "GOLF_AUSTRALIA",
     country: "eng",
     apiBase: "",
     username: "",
@@ -591,6 +601,11 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
                   { value: "MANUAL" as const, label: "Typed in by hand", blurb: "No external lookups." },
                   { value: "DIRECTORY" as const, label: "GolfDay directory", blurb: "Players already here. No keys." },
                   { value: "WHS" as const, label: "National WHS database", blurb: "England, Scotland, Wales, Ireland." },
+                  ...OVERSEAS_SOURCES.map((value) => ({
+                    value,
+                    label: OVERSEAS_LABELS[value].label,
+                    blurb: `Overseas lookup by ${OVERSEAS_LABELS[value].idLabel}.`,
+                  })),
                   { value: "CDH" as const, label: "Our own CDH endpoint", blurb: "GET {base}/golfers/{id}." },
                 ].map((option) => (
                   <label
@@ -615,7 +630,9 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
                 ))}
               </div>
 
-              {(integrationForm.source === "WHS" || integrationForm.source === "CDH") && (
+              {(integrationForm.source === "WHS" ||
+                integrationForm.source === "CDH" ||
+                isOverseasSource(integrationForm.source)) && (
                 <div className="grid gap-2 rounded-xl bg-ink/[0.02] p-3 sm:grid-cols-2">
                   {integrationForm.source === "WHS" && (
                     <div>
@@ -638,17 +655,26 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
                     <input
                       id="handicap-base"
                       className="input font-mono text-[12px]"
-                      placeholder={integrationForm.source === "WHS" ? "https://isvapi.whsplatform.englandgolf.org" : "https://handicaps.example.com/v1"}
+                      placeholder={
+                        integrationForm.source === "WHS"
+                          ? "https://isvapi.whsplatform.englandgolf.org"
+                          : isOverseasSource(integrationForm.source)
+                            ? OVERSEAS_LABELS[integrationForm.source].base
+                            : "https://handicaps.example.com/v1"
+                      }
                       value={integrationForm.apiBase}
                       onChange={(e) => setIntegrationForm((prev) => ({ ...prev, apiBase: e.target.value }))}
                     />
                     <p className="mt-1 text-[11px] text-ink/45">
                       {integrationForm.source === "WHS"
                         ? "Leave blank for the national platform."
-                        : "Your endpoint must answer GET {base}/golfers/{id} with name and handicap."}
+                        : isOverseasSource(integrationForm.source)
+                          ? "Leave blank for the standard address. Override it if your contact gave you a different one."
+                          : "Your endpoint must answer GET {base}/golfers/{id} with name and handicap."}
                     </p>
                   </div>
-                  {integrationForm.source === "WHS" && (
+                  {(integrationForm.source === "WHS" ||
+                    (isOverseasSource(integrationForm.source) && !OVERSEAS_LABELS[integrationForm.source].keyOnly)) && (
                     <div>
                       <label className="label" htmlFor="handicap-user">Club username</label>
                       <input
@@ -656,14 +682,24 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
                         className="input"
                         value={integrationForm.username}
                         onChange={(e) => setIntegrationForm((prev) => ({ ...prev, username: e.target.value }))}
-                        placeholder="club login from the union"
+                        placeholder={
+                          isOverseasSource(integrationForm.source)
+                            ? `club login from ${OVERSEAS_LABELS[integrationForm.source].label}`
+                            : "club login from the union"
+                        }
                         autoComplete="off"
                       />
                     </div>
                   )}
                   <div>
                     <label className="label" htmlFor="handicap-secret">
-                      {integrationForm.source === "WHS" ? "Secret key" : "API key (optional)"}
+                      {integrationForm.source === "WHS"
+                        ? "Secret key"
+                        : isOverseasSource(integrationForm.source)
+                          ? OVERSEAS_LABELS[integrationForm.source].keyOnly
+                            ? "API key"
+                            : "Password"
+                          : "API key (optional)"}
                     </label>
                     <input
                       id="handicap-secret"
@@ -683,20 +719,30 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
                       )}
                     </p>
                   </div>
-                  {integrationForm.source === "WHS" && (
+                  {(integrationForm.source === "WHS" || integrationForm.source === "GHIN") && (
                     <div className="sm:col-span-2">
-                      <label className="label" htmlFor="handicap-token">Client token (JWT) - optional</label>
+                      <label className="label" htmlFor="handicap-token">
+                        {integrationForm.source === "GHIN" ? "Client token - optional" : "Client token (JWT) - optional"}
+                      </label>
                       <input
                         id="handicap-token"
                         type="password"
                         className="input font-mono text-[12px]"
                         value={integrationForm.clientToken}
                         onChange={(e) => setIntegrationForm((prev) => ({ ...prev, clientToken: e.target.value }))}
-                        placeholder={integration?.hasClientToken ? "saved" : "paste it if the union issued one"}
+                        placeholder={
+                          integration?.hasClientToken
+                            ? "saved"
+                            : integrationForm.source === "GHIN"
+                              ? "only if GHIN issued one with your login"
+                              : "paste it if the union issued one"
+                        }
                         autoComplete="new-password"
                       />
                       <p className="mt-1 text-[11px] text-ink/45">
-                        Used verbatim when present; otherwise GolfDay signs one with the username and secret.
+                        {integrationForm.source === "GHIN"
+                          ? "Some GHIN clubs pair a token with the login. Leave blank if yours did not."
+                          : "Used verbatim when present; otherwise GolfDay signs one with the username and secret."}
                         {integration?.hasClientToken && (
                           <button type="button" className="ml-1 font-semibold text-rose-700 hover:underline" onClick={() => void clearCredential("clientToken")}>
                             Remove
@@ -717,7 +763,11 @@ export function SocietyDashboard({ society, members, fixtures, seasons, role, ca
                 <div className="flex flex-1 items-center gap-2">
                   <input
                     className="input h-8 max-w-[190px] text-[12.5px]"
-                    placeholder="CDH / member ID to test"
+                    placeholder={
+                      isOverseasSource(integrationForm.source)
+                        ? `${OVERSEAS_LABELS[integrationForm.source].idLabel} to test`
+                        : "CDH / member ID to test"
+                    }
                     value={testId}
                     onChange={(e) => setTestId(e.target.value)}
                   />

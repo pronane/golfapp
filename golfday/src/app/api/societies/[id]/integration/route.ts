@@ -32,7 +32,7 @@ export const GET = route(async (_request: Request, ctx: Ctx) => {
 });
 
 const schema = z.object({
-  source: z.enum(["MANUAL", "DIRECTORY", "WHS", "CDH"]).optional(),
+  source: z.enum(["MANUAL", "DIRECTORY", "WHS", "CDH", "GHIN", "GOLF_CANADA", "GOLF_AUSTRALIA"]).optional(),
   country: z.enum(["eng", "sco", "wal", "irl"]).optional(),
   apiBase: z.string().max(300).optional(),
   username: z.string().max(120).optional(),
@@ -92,7 +92,13 @@ export const POST = route(async (request: Request, ctx: Ctx) => {
     });
   } catch (error) {
     if (error instanceof ApiError) {
-      return json({ ok: false, code: error.code, detail: error.message, player: null, provider: { source: provider.source, label: provider.label, ready: provider.ready } });
+      // The HTTP status matters: a lookup that *cannot run* (not configured,
+      // rejected credentials, a timeout) is not the same answer as "nobody by
+      // that number", and must never be mistaken for one.
+      return json(
+        { ok: false, code: error.code, detail: error.message, player: null, provider: { source: provider.source, label: provider.label, ready: provider.ready } },
+        { status: error.status },
+      );
     }
     throw error;
   }
