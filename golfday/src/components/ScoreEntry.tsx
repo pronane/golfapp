@@ -302,6 +302,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
                   return (
                     <button
                       key={strokes}
+                      aria-label={`Score ${strokes} on hole ${hole.holeNumber}`}
                       onClick={() => save(activePlayer.id, hole.holeNumber, strokes)}
                       disabled={saving !== null}
                       className={`group relative rounded-xl px-1 py-3 text-center transition ${
