@@ -46,6 +46,9 @@ export async function createUserWithPlayer(input: {
   handicapIndex?: number;
   homeClub?: string;
   golfEnglandId?: string;
+  /** Where the index came from - a player with no club is a normal case. */
+  handicapSource?: string;
+  handicapNote?: string;
   isSiteAdmin?: boolean;
 }) {
   const now = new Date().toISOString();
@@ -70,7 +73,9 @@ export async function createUserWithPlayer(input: {
     homeClub: input.homeClub ?? null,
     golfEnglandId: input.golfEnglandId ?? null,
     claimCode: newClaimCode(),
-    handicapSource: input.golfEnglandId ? "GOLF_ENGLAND" : "MANUAL",
+    handicapSource: input.handicapSource ?? (input.golfEnglandId ? "GOLF_ENGLAND" : "MANUAL"),
+    handicapVerified: false, // only a national lookup sets this
+    handicapNote: input.handicapNote?.trim() || null,
     handicapUpdatedAt: now,
   });
 

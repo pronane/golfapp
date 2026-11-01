@@ -83,6 +83,39 @@ unique 1-18; the editor flags duplicates. The card is validated server-side
 3. **iGolf** (for players without a club) - handicap lookup in the England Golf app, again
    not a documented public API.
 
+## A handicap without a club
+
+The national database is only *one* way to hold a handicap, and plenty of
+golfers have none of it. Provenance is therefore a property of the **player**
+(`src/lib/handicapProvenance.ts`), not of a club:
+
+| Stored | Shown as | Official? | Lookup? |
+| --- | --- | --- | --- |
+| `WHS` | National WHS database | yes | yes - the only *verified* route |
+| `IGOLF` | iGolf (no club needed) | yes | no |
+| `OVERSEAS` | Another country's system (GHIN, Golf Canada, Golf Australia…) | yes, elsewhere | no |
+| `SOCIETY` | Society or committee handicap | no - local | no |
+| `MANUAL` | Entered by hand | no | no |
+| `NONE` | No handicap yet - plays off scratch | no | no |
+
+* **Nothing is blocked.** A player with `NONE` registers, is entered in a field,
+  gets a playing handicap of 0 and scores normally; `tests/handicap-provenance.test.ts`
+  proves that end to end. It is a documented state, not an error.
+* **Only a lookup verifies.** `players.handicap_verified` is set by a national
+  lookup and by nothing else, so an organiser can see at a glance whether an
+  index was confirmed (`WHS ✓ verified`) or merely declared. Typing a new number
+  clears the flag; so does changing the source.
+* **The club setting is optional.** A society that picks *Typed in by hand*
+  does no lookups at all - it is a convenience, not a requirement, and every
+  player keeps their own declared handicap either way.
+* **Where it is set:** register (a "Where does your handicap come from?" step),
+  the player's profile card, and the organiser's *New guest player* form - so a
+  secretary can enter a guest with a society handicap or no handicap at all.
+* **Overseas systems** are recorded, with the federation/number in
+  `players.handicap_note`, rather than pretending a GHIN index can be verified
+  from here. Adding a provider later (GHIN, Golf Canada, Golf Australia) means
+  one more entry in the lookup resolver, not a schema change.
+
 ## Per-society sources
 
 A handicap source is chosen **per society**, because that is where the decision

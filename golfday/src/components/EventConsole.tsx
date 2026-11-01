@@ -8,6 +8,7 @@ import { CopyButton } from "./CopyButton";
 import { GamesConsole } from "./GamesConsole";
 import { PaymentsPanel } from "./PaymentsPanel";
 import { STATUS_LABEL, STATUS_STYLE } from "@/lib/status";
+import { SELECTABLE_PROVENANCES, provenanceMeta } from "@/lib/handicapProvenance";
 
 export type ConsoleEvent = {
   id: string;
@@ -36,6 +37,8 @@ export type ConsoleRegistration = {
     golfEnglandId: string | null;
     claimCode: string;
     userId: string | null;
+    handicapSource?: string | null;
+    handicapVerified?: boolean;
   };
   registration: {
     id: string;
@@ -101,7 +104,7 @@ export function EventConsole(props: Props) {
   const [playerResults, setPlayerResults] = useState<
     { id: string; name: string; handicapIndex: number; homeClub: string | null; hasAccount: boolean }[]
   >([]);
-  const [guest, setGuest] = useState({ name: "", handicapIndex: "", homeClub: "", golfEnglandId: "" });
+  const [guest, setGuest] = useState({ name: "", handicapIndex: "", homeClub: "", golfEnglandId: "", handicapSource: "MANUAL" });
   const [csv, setCsv] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminRole, setAdminRole] = useState<"ADMIN" | "SCORER">("ADMIN");
@@ -350,8 +353,15 @@ export function EventConsole(props: Props) {
                   <tr key={player.id}>
                     <td>
                       <div className="font-semibold">{player.name}</div>
-                      <div className="text-[11.5px] text-ink/45">
-                        {player.homeClub ?? "No club"} · {player.golfEnglandId ?? "no GE id"} · claim {player.claimCode}
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink/45">
+                        <span>{player.homeClub ?? "No club"} · claim {player.claimCode}</span>
+                        <span
+                          className="rounded-full bg-ink/[0.05] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink/55"
+                          title={provenanceMeta(player.handicapSource).blurb}
+                        >
+                          {provenanceMeta(player.handicapSource).short}
+                          {player.handicapVerified ? " ✓ verified" : ""}
+                        </span>
                       </div>
                     </td>
                     <td className="text-center font-mono text-[12.5px]">{player.handicapIndex.toFixed(1)}</td>
@@ -476,9 +486,30 @@ export function EventConsole(props: Props) {
               <p className="text-[12px] text-ink/50">No account needed - they can claim the entry later with the claim code.</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <input className="input col-span-2" placeholder="Full name" value={guest.name} onChange={(e) => setGuest({ ...guest, name: e.target.value })} />
-                <input className="input" placeholder="Handicap index" value={guest.handicapIndex} onChange={(e) => setGuest({ ...guest, handicapIndex: e.target.value })} />
-                <input className="input" placeholder="Club" value={guest.homeClub} onChange={(e) => setGuest({ ...guest, homeClub: e.target.value })} />
-                <input className="input col-span-2" placeholder="Golf England ID (optional)" value={guest.golfEnglandId} onChange={(e) => setGuest({ ...guest, golfEnglandId: e.target.value })} />
+                <select
+                  className="select col-span-2"
+                  aria-label="Where their handicap comes from"
+                  value={guest.handicapSource}
+                  onChange={(e) => setGuest({ ...guest, handicapSource: e.target.value })}
+                >
+                  {SELECTABLE_PROVENANCES.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <input
+                  className="input"
+                  placeholder="Handicap index"
+                  value={guest.handicapIndex}
+                  onChange={(e) => setGuest({ ...guest, handicapIndex: e.target.value })}
+                  disabled={guest.handicapSource === "NONE"}
+                />
+                <input className="input" placeholder="Club (optional)" value={guest.homeClub} onChange={(e) => setGuest({ ...guest, homeClub: e.target.value })} />
+                <input
+                  className="input col-span-2"
+                  placeholder={provenanceMeta(guest.handicapSource).notePlaceholder ?? "Handicap ID (optional)"}
+                  value={guest.golfEnglandId}
+                  onChange={(e) => setGuest({ ...guest, golfEnglandId: e.target.value })}
+                />
               </div>
               <button
                 className="btn-primary btn-sm mt-2 w-full"
@@ -486,14 +517,15 @@ export function EventConsole(props: Props) {
                 onClick={async () => {
                   const created = await call("/api/players", "POST", {
                     name: guest.name,
-                    handicapIndex: guest.handicapIndex ? Number(guest.handicapIndex) : 0,
+                    handicapIndex: guest.handicapSource === "NONE" ? 0 : guest.handicapIndex ? Number(guest.handicapIndex) : 0,
                     homeClub: guest.homeClub || undefined,
                     golfEnglandId: guest.golfEnglandId || undefined,
+                    handicapSource: guest.handicapSource,
                   });
                   if (created?.player) {
                     await call(`/api/events/${props.event.id}/players`, "POST", { playerId: created.player.id });
                     flash(`${created.player.name} created and entered`);
-                    setGuest({ name: "", handicapIndex: "", homeClub: "", golfEnglandId: "" });
+                    setGuest({ name: "", handicapIndex: "", homeClub: "", golfEnglandId: "", handicapSource: "MANUAL" });
                   }
                 }}
               >

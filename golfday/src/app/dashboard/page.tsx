@@ -151,6 +151,8 @@ export default async function DashboardPage() {
                     homeClub: player.homeClub,
                     golfEnglandId: player.golfEnglandId,
                     handicapSource: player.handicapSource,
+                    handicapVerified: player.handicapVerified,
+                    handicapNote: player.handicapNote,
                     handicapUpdatedAt: player.handicapUpdatedAt,
                   }
                 : null

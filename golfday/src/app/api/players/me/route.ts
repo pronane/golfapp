@@ -5,7 +5,8 @@ import { ApiError, json, parseJson, requireUser, route } from "@/lib/http";
 import { lookupByGolfEnglandId, resolveHandicapProvider } from "@/lib/golfengland";
 import { listSocietiesForPlayer } from "@/lib/societies";
 import { z } from "zod";
-import { validate } from "@/lib/validate";
+import { handicapProvenanceSchema, validate } from "@/lib/validate";
+import { provenanceFromLookup } from "@/lib/handicapProvenance";
 
 const schema = z.object({
   name: z.string().min(2).max(80).optional(),
@@ -15,6 +16,9 @@ const schema = z.object({
   refreshFromGolfEngland: z.boolean().optional(),
   /** Which club's handicap integration to use; defaults to the player's society. */
   societyId: z.string().max(40).optional(),
+  /** iGolf, overseas, society, manual or none - a club is optional. */
+  handicapSource: handicapProvenanceSchema.optional(),
+  handicapNote: z.string().max(160).optional(),
 });
 
 /** Update the signed-in user's own player profile / pull a fresh handicap. */
@@ -29,10 +33,23 @@ export const PATCH = route(async (request: Request) => {
   if (body.name) updates.name = body.name;
   if (body.homeClub !== undefined) updates.homeClub = body.homeClub;
   if (body.golfEnglandId !== undefined) updates.golfEnglandId = body.golfEnglandId || null;
+  if (body.handicapNote !== undefined) updates.handicapNote = body.handicapNote.trim() || null;
+
   if (body.handicapIndex !== undefined) {
     updates.handicapIndex = body.handicapIndex;
-    updates.handicapSource = "MANUAL";
     updates.handicapUpdatedAt = new Date().toISOString();
+    // Typing an index by hand is not a verified index. Keep the declared
+    // provenance when the player has one (iGolf, overseas, society), otherwise
+    // fall back to MANUAL - never leave a stale "verified" flag behind.
+    updates.handicapSource = body.handicapSource ?? (player.handicapSource === "NONE" ? "MANUAL" : player.handicapSource);
+    updates.handicapVerified = false;
+  } else if (body.handicapSource !== undefined && body.handicapSource !== player.handicapSource) {
+    // Only the provenance changed. Dropping to NONE zeroes the index rather
+    // than leaving a number behind that nothing vouches for.
+    updates.handicapSource = body.handicapSource;
+    updates.handicapVerified = false;
+    updates.handicapUpdatedAt = new Date().toISOString();
+    if (body.handicapSource === "NONE") updates.handicapIndex = 0;
   }
 
   if (body.refreshFromGolfEngland) {
@@ -54,7 +71,10 @@ export const PATCH = route(async (request: Request) => {
     updates.handicapIndex = found.handicapIndex;
     updates.homeClub = found.homeClub || player.homeClub;
     updates.golfEnglandId = found.golfEnglandId;
-    updates.handicapSource = found.source;
+    // A lookup is the only route that verifies an index.
+    const mapped = provenanceFromLookup(found.source);
+    updates.handicapSource = mapped.source;
+    updates.handicapVerified = mapped.verified;
     updates.handicapUpdatedAt = new Date().toISOString();
   }
 
