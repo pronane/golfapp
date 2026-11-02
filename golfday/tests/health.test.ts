@@ -50,4 +50,18 @@ describe("GET /api/health", () => {
     // Counts only: never a player name, an email or a secret.
     expect(JSON.stringify(body)).not.toMatch(/Health Check|@/);
   });
+
+  it("names the columns a database is missing, instead of looking fine", async () => {
+    // A reachable, seeded database can still be behind the build - that is what
+    // `no such column: "flights"` looked like to a visitor. The health check
+    // says it out loud, with the column names.
+    await client.execute("alter table event_settings drop column flights");
+    const res = await health.GET();
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.schema).toBe("behind");
+    expect(body.ok).toBe(false);
+    expect(body.missingColumns).toContain("event_settings.flights");
+    expect(body.reason).toMatch(/db:push/);
+  });
 });

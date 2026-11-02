@@ -13,6 +13,7 @@
 PRAGMA foreign_keys = OFF;
 
 -- Fresh tables, children before parents.
+DROP TABLE IF EXISTS mail_outbox;
 DROP TABLE IF EXISTS payment_refunds;
 DROP TABLE IF EXISTS event_payments;
 DROP TABLE IF EXISTS side_game_entries;
@@ -38,6 +39,7 @@ DROP TABLE IF EXISTS courses;
 DROP TABLE IF EXISTS players;
 DROP TABLE IF EXISTS users;
 
+-- GolfDay schema (SQLite / libSQL compatible, also runs on Turso)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL,
@@ -199,6 +201,8 @@ CREATE TABLE IF NOT EXISTS event_state (
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
 
+-- Game settings, 4BBB pairs and side games (added in a separate table each so
+-- existing databases only need these CREATE statements).
 CREATE TABLE IF NOT EXISTS event_settings (
   event_id TEXT PRIMARY KEY,
   skins TEXT NOT NULL DEFAULT 'OFF',
@@ -209,9 +213,33 @@ CREATE TABLE IF NOT EXISTS event_settings (
   team_names TEXT NOT NULL DEFAULT '["Team A","Team B"]',
   matches TEXT NOT NULL DEFAULT '[]',
   entry_fee_pence INTEGER NOT NULL DEFAULT 0,
+  -- CASH | STRIPE: how an entry fee is collected. Cash is the default, because
+  -- most golf days are settled on the day.
   payment_mode TEXT NOT NULL DEFAULT 'CASH',
+  -- 0 = one board; 2-6 = split the field by handicap into that many flights.
+  flights INTEGER NOT NULL DEFAULT 0,
+  -- Anti-cheat: hide the board from players until they have carded every hole.
+  hide_board INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
+
+-- Every message GolfDay composes, whether or not a mail transport is set up.
+CREATE TABLE IF NOT EXISTS mail_outbox (
+  id TEXT PRIMARY KEY,
+  event_id TEXT,
+  to_email TEXT NOT NULL,
+  to_name TEXT,
+  kind TEXT NOT NULL DEFAULT 'INVITE',
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'QUEUED',
+  provider_id TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (current_timestamp),
+  sent_at TEXT
+);
+CREATE INDEX IF NOT EXISTS mail_outbox_event_idx ON mail_outbox (event_id);
+CREATE INDEX IF NOT EXISTS mail_outbox_created_idx ON mail_outbox (created_at);
 
 CREATE TABLE IF NOT EXISTS event_pairs (
   id TEXT PRIMARY KEY,
@@ -235,6 +263,7 @@ CREATE TABLE IF NOT EXISTS side_game_entries (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS side_game_entry_unique ON side_game_entries (event_id, kind, hole_number, player_id);
 
+-- Entry fees: one row per player who has paid (or started paying) for an event.
 CREATE TABLE IF NOT EXISTS event_payments (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
@@ -245,12 +274,14 @@ CREATE TABLE IF NOT EXISTS event_payments (
   stripe_session_id TEXT,
   stripe_payment_intent TEXT,
   paid_at TEXT,
+  -- refunds are recorded against the entry, so "how much is left" is arithmetic
   refunded_pence INTEGER NOT NULL DEFAULT 0,
   refunded_at TEXT,
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS event_payment_unique ON event_payments (event_id, player_id);
 
+-- Texas scramble: one card per tee group (the team), not per player.
 CREATE TABLE IF NOT EXISTS scramble_scores (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
@@ -264,6 +295,8 @@ CREATE TABLE IF NOT EXISTS scramble_scores (
 CREATE UNIQUE INDEX IF NOT EXISTS scramble_score_unique ON scramble_scores (event_id, group_id, hole_number);
 CREATE INDEX IF NOT EXISTS scramble_score_group_idx ON scramble_scores (event_id, group_id);
 
+-- Team-card corrections are audited too - a scramble card is easy to mistype
+-- and disputes are settled hole by hole.
 CREATE TABLE IF NOT EXISTS scramble_audit (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
@@ -276,6 +309,8 @@ CREATE TABLE IF NOT EXISTS scramble_audit (
 );
 CREATE INDEX IF NOT EXISTS scramble_audit_event_idx ON scramble_audit (event_id);
 
+-- A society is the club that runs the golf days: its own fixture list, roster
+-- and seasons. Everything is optional - a one-off event needs no society.
 CREATE TABLE IF NOT EXISTS societies (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL,
@@ -307,6 +342,7 @@ CREATE TABLE IF NOT EXISTS society_members (
 CREATE UNIQUE INDEX IF NOT EXISTS society_member_unique ON society_members (society_id, player_id);
 CREATE INDEX IF NOT EXISTS society_member_player_idx ON society_members (player_id);
 
+-- One society per fixture (a golf day belongs to the club that runs it).
 CREATE TABLE IF NOT EXISTS society_events (
   id TEXT PRIMARY KEY,
   society_id TEXT NOT NULL,
@@ -315,6 +351,7 @@ CREATE TABLE IF NOT EXISTS society_events (
 CREATE UNIQUE INDEX IF NOT EXISTS society_event_unique ON society_events (event_id);
 CREATE INDEX IF NOT EXISTS society_event_society_idx ON society_events (society_id);
 
+-- A season / order of merit: points from the fixtures attached to it.
 CREATE TABLE IF NOT EXISTS seasons (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL,
@@ -338,6 +375,8 @@ CREATE TABLE IF NOT EXISTS season_events (
 CREATE UNIQUE INDEX IF NOT EXISTS season_event_unique ON season_events (event_id);
 CREATE INDEX IF NOT EXISTS season_event_season_idx ON season_events (season_id);
 
+-- Every refund (full or partial) against an entry fee, so the organiser has a
+-- ledger even when several part-refunds are made against one payment.
 CREATE TABLE IF NOT EXISTS payment_refunds (
   id TEXT PRIMARY KEY,
   payment_id TEXT NOT NULL,

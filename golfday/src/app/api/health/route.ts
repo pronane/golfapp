@@ -1,4 +1,5 @@
 import { client } from "@/db/client";
+import { missingColumns, reconcileColumns } from "@/db/reconcile";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const started = Date.now();
   let db: "up" | "down" = "up";
-  let schema: "ready" | "empty" | "unknown" = "unknown";
+  let schema: "ready" | "empty" | "behind" | "unknown" = "unknown";
   let players: number | null = null;
   let reason: string | null = null;
+  let missing: string[] = [];
 
   try {
     await client.execute("select 1");
@@ -38,6 +40,21 @@ export async function GET() {
       const res = await client.execute("select count(*) as n from players");
       players = Number(res.rows[0]?.n ?? 0);
       schema = players > 0 ? "ready" : "empty";
+
+      // A database can be reachable, seeded and still missing a column this
+      // build needs - that is what made a fresh deployment throw `no such
+      // column: "flights"` on every page. Checking is a few PRAGMA reads, and
+      // AUTO_PUSH_SCHEMA repairs it here rather than leaving it for a 500.
+      missing = await missingColumns(client);
+      if (missing.length > 0 && (process.env.AUTO_PUSH_SCHEMA === "1" || process.env.DEMO_AUTOSEED === "1")) {
+        const { applied } = await reconcileColumns(client);
+        if (applied.length > 0) console.warn(`[health] repaired schema drift: ${applied.join(", ")}`);
+        missing = await missingColumns(client);
+      }
+      if (missing.length > 0) {
+        schema = "behind";
+        reason = `schema is behind this build - missing ${missing.join(", ")}; run \`npm run db:push\` against this database`;
+      }
     } catch {
       schema = "empty";
       reason = "schema not applied - run `npm run db:push` against this database";
@@ -56,6 +73,8 @@ export async function GET() {
       schema,
       players,
       reason,
+      // Empty is the good case. Named columns make a stale deployment obvious.
+      missingColumns: missing,
       ms: Date.now() - started,
       // Which build answered: handy when a platform shows an old deployment.
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.RENDER_GIT_COMMIT ?? null,

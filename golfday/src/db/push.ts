@@ -1,47 +1,37 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { client } from "./client";
+import { ADDED_COLUMNS, ADDED_INDEXES, reconcileColumns } from "./reconcile";
 
 /**
- * Columns added after a table shipped. `CREATE TABLE IF NOT EXISTS` cannot add
- * them to a database that already exists, and SQLite has no
- * `ADD COLUMN IF NOT EXISTS`, so each one is attempted and the "duplicate
- * column" error is ignored. That keeps `db:push` idempotent on old databases
- * (including Turso) without a migration runner.
+ * Create the tables (idempotent) and then bring an existing database up to date.
+ *
+ * Two steps, because they solve different problems:
+ *
+ *   1. `schema.sql` - `CREATE TABLE IF NOT EXISTS` for a brand-new database.
+ *   2. `reconcileColumns` - `ALTER TABLE ... ADD COLUMN` for columns added after
+ *      a table shipped, on a database that already has the tables. Skipping this
+ *      step is what let a demo database boot without `event_settings.flights`
+ *      and then error on every page that read it.
+ *
+ * Safe to run on every boot; nothing here deletes or rewrites data.
  */
-const ADDED_COLUMNS: string[] = [
-  "ALTER TABLE event_payments ADD COLUMN stripe_payment_intent TEXT",
-  "ALTER TABLE event_payments ADD COLUMN refunded_pence INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE event_payments ADD COLUMN refunded_at TEXT",
-  // per-society handicap integration
-  "ALTER TABLE societies ADD COLUMN handicap_source TEXT NOT NULL DEFAULT 'DIRECTORY'",
-  "ALTER TABLE societies ADD COLUMN handicap_country TEXT NOT NULL DEFAULT 'eng'",
-  "ALTER TABLE societies ADD COLUMN handicap_api_base TEXT",
-  "ALTER TABLE societies ADD COLUMN handicap_api_username TEXT",
-  "ALTER TABLE societies ADD COLUMN handicap_api_secret TEXT",
-  "ALTER TABLE societies ADD COLUMN handicap_client_token TEXT",
-  "ALTER TABLE societies ADD COLUMN handicap_updated_at TEXT",
-  // how an entry fee is collected (cash is the default)
-  "ALTER TABLE event_settings ADD COLUMN payment_mode TEXT NOT NULL DEFAULT 'CASH'",
-  // handicap provenance (a player needs no club to have a handicap)
-  "ALTER TABLE players ADD COLUMN handicap_verified INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE players ADD COLUMN handicap_note TEXT",
-  // social sign-in
-  "ALTER TABLE users ADD COLUMN oauth_provider TEXT",
-  "ALTER TABLE users ADD COLUMN oauth_subject TEXT",
-  "CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_unique ON users (oauth_provider, oauth_subject)",
-  // flights and the hide-the-board anti-cheat toggle
-  "ALTER TABLE event_settings ADD COLUMN flights INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE event_settings ADD COLUMN hide_board INTEGER NOT NULL DEFAULT 0",
-];
 
-function isDuplicateColumn(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return /duplicate column name/i.test(message);
+/** Kept for anything that wants to know the full additive contract. */
+export { ADDED_COLUMNS, ADDED_INDEXES };
+
+export type PushResult = {
+  /** Statements run from schema.sql. */
+  statements: number;
+  /** Columns that were missing and have just been added, e.g. "event_settings.flights". */
+  added: string[];
+};
+
+export async function pushSchema(): Promise<number> {
+  return (await pushSchemaDetailed()).statements;
 }
 
-/** Splits the DDL file into statements and runs them one by one (idempotent). */
-export async function pushSchema() {
+export async function pushSchemaDetailed(): Promise<PushResult> {
   const sqlFile = path.join(process.cwd(), "src/db/schema.sql");
   const ddl = readFileSync(sqlFile, "utf8");
   const statements = ddl
@@ -56,19 +46,27 @@ export async function pushSchema() {
     await client.execute(statement);
   }
 
-  for (const statement of ADDED_COLUMNS) {
+  // Columns first, then indexes: an index that names a column added in this run
+  // cannot be created before the ALTER, and `IF NOT EXISTS` keeps the rest cheap.
+  const { applied } = await reconcileColumns(client);
+
+  for (const statement of ADDED_INDEXES) {
     try {
       await client.execute(statement);
     } catch (err) {
-      if (!isDuplicateColumn(err)) throw err;
+      if (!/already exists|no such column/i.test(String(err))) throw err;
     }
   }
-  return statements.length;
+
+  return { statements: statements.length, added: applied };
 }
 
 if (process.argv[1]?.endsWith("push.ts") || process.argv[1]?.endsWith("db-push.ts")) {
-  pushSchema()
-    .then((n) => console.log(`✅ schema applied (${n} statements) to ${process.env.DATABASE_URL ?? "file:./data/golfday.db"}`))
+  pushSchemaDetailed()
+    .then(({ statements, added }) => {
+      console.log(`✅ schema applied (${statements} statements) to ${process.env.DATABASE_URL ?? "file:./data/golfday.db"}`);
+      console.log(added.length === 0 ? "✅ columns already current" : `✅ added columns: ${added.join(", ")}`);
+    })
     .catch((err) => {
       console.error("❌ schema push failed", err);
       process.exit(1);
