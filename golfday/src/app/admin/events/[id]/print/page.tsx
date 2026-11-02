@@ -71,7 +71,7 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
                   className="h-[116px] w-[116px] shrink-0"
                 />
               </div>
-              <p className="mt-2 text-[13px] font-semibold">Scan to score - or open /score</p>
+              <p className="mt-2 text-[13px] font-semibold">Scan to score - no app, no sign-in</p>
               <ul className="mt-1.5 grid grid-cols-2 gap-x-3 text-[12.5px]">
                 {players.map((player) => (
                   <li key={player.name} className="truncate">

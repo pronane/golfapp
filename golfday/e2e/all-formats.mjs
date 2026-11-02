@@ -1069,6 +1069,39 @@ async function runFormat(ctx, config) {
       body: { skins: "NET", skinsCarry: true, teamFormat: "FOURBBB", sideHoles: [], sponsors: [], matches: [], flights: 0, hideBoard: false },
     });
     note("hidden board: strangers redacted, organiser unaffected");
+
+    // 6. The clubhouse screen credits the sponsors, and the share button is a
+    //    plain WhatsApp deep link - no business API, no Meta app in the path.
+    const sponsored = await call("PUT", `/api/events/${event.id}/games`, {
+      cookie: adminCookie,
+      body: {
+        skins: "NET",
+        skinsCarry: true,
+        teamFormat: "FOURBBB",
+        sideHoles: [],
+        sponsors: [{ name: "Checkers Gin" }],
+        matches: [],
+        flights: 0,
+        hideBoard: false,
+      },
+    });
+    must(sponsored.status === 200, `adding a sponsor failed (${sponsored.status})`);
+    const livePage = await call("GET", `/live/${event.slug}`, { text: true });
+    check(livePage.status === 200, `the live board returned ${livePage.status}`);
+    check(livePage.body.includes("Checkers Gin"), "the sponsor is missing from the live board");
+    const tvPage = await call("GET", `/live/${event.slug}?tv=1`, { text: true });
+    check(tvPage.body.includes("Checkers Gin"), "the sponsor is missing from the clubhouse TV board");
+    check(livePage.body.includes("https://wa.me/?text="), "the live board has no WhatsApp share link");
+    check(
+      !/api\.whatsapp\.com|graph\.facebook\.com|whatsapp_business/i.test(livePage.body),
+      "the share link goes through a WhatsApp business API",
+    );
+    check(livePage.body.includes("Copy link"), "the share button has no copy fallback for a laptop");
+    await call("PUT", `/api/events/${event.id}/games`, {
+      cookie: adminCookie,
+      body: { skins: "NET", skinsCarry: true, teamFormat: "FOURBBB", sideHoles: [], sponsors: [], matches: [], flights: 0, hideBoard: false },
+    });
+    note("sponsors on both boards; WhatsApp share is a wa.me deep link with a copy fallback");
   });
 
   await step("CSV export and the public board agree", async () => {

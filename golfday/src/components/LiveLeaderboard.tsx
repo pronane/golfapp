@@ -470,6 +470,34 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
           </table>
         </div>
         <div className="min-h-0 space-y-4 overflow-hidden">
+          {data.flights && data.flights.length > 0 && (
+            <section className="rounded-2xl bg-white/70 p-5 ring-1 ring-inset ring-fairway-200/70">
+              <h2 className="text-[15px] font-bold">Flights</h2>
+              <ol className="mt-3 space-y-1.5">
+                {data.flights.map((flight) => {
+                  const leader = flight.standings[0];
+                  return (
+                    <li key={flight.name} className="flex items-center justify-between gap-3 rounded-xl bg-fairway-50 px-3 py-2 text-[15px]">
+                      <span className="min-w-0">
+                        <span className="mr-2 font-mono text-fairway-800/60">{flight.index + 1}</span>
+                        <span className="font-semibold">{leader ? leader.playerName : "—"}</span>
+                        <span className="ml-2 text-[12.5px] text-fairway-800/60">
+                          {flight.name} · {flight.standings.length} players
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono font-extrabold">
+                        {!leader || leader.thru === 0
+                          ? "–"
+                          : isStableford
+                            ? `${leader.points} pts`
+                            : formatToPar(leader.netToPar)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          )}
           <GamesPanels games={data.games} tv />
           {!data.games?.matchPlay && (
             <section className="rounded-2xl bg-white/70 p-5 ring-1 ring-inset ring-fairway-200/70">

@@ -81,10 +81,10 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # 153 unit tests
+npm test           # 158 unit tests
 npm run e2e        # the browser click-through (own database, own server)
 npm run e2e:friends # the friends' day: no society, hand-typed course, cash entry
-npm run e2e:formats # every event type, 19 players, all 18 holes, no browser needed
+npm run e2e:formats # every event type, 19 players, all 18 holes, 3,190 checks, no browser needed
 npm run setup      # env + schema + launchers + checks, no browser run
 ```
 
@@ -171,7 +171,14 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   it opens up when the day is completed.
 * **Share to WhatsApp** - one button on the live board and in the console, with
   the message already written, for the way a society actually passes a link
-  around.
+  around. It is a plain `https://wa.me/?text=…` deep link, so it needs **no
+  WhatsApp Business account, no Meta app, no API key and no approved message
+  template**: it opens *the WhatsApp the person already uses* and they press
+  send. On a phone that is the app; on a laptop it is WhatsApp Web (or
+  WhatsApp's "get the app" page if that browser has never paired a phone), which
+  is why a **Copy link** button sits beside it - and where the browser offers a
+  share sheet (`navigator.share`), an **Other app…** button opens that instead.
+  Nothing is sent by the server and it never sees the recipient.
 
 ### Formats, societies and seasons
 
