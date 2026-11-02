@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { ApiError, getEventAccess, json, parseJson, route } from "@/lib/http";
 import { bumpRevision, getEventById, getEventHoles } from "@/lib/events";
 import { isScrambleFormat } from "@/lib/scramble";
+import { scoreWriteRule } from "@/lib/status";
 import { groupMemberIds, saveScrambleScore } from "@/lib/scrambleScores";
 import { validate } from "@/lib/validate";
 
@@ -37,7 +38,6 @@ export const POST = route(async (request: Request) => {
   if (!isScrambleFormat(event.format)) {
     throw new ApiError(409, "This event is not a Texas scramble", "not_scramble");
   }
-  if (event.status === "COMPLETED") throw new ApiError(409, "This event is complete - scores are locked", "event_completed");
   if (event.status === "DRAFT" || event.status === "CANCELLED") {
     throw new ApiError(409, "Scoring is not open for this event", "event_closed");
   }
@@ -68,6 +68,10 @@ export const POST = route(async (request: Request) => {
     }
   }
   if (!authorised) throw new ApiError(403, "You cannot update this card", "forbidden");
+  // Same rule as an individual card: the field is shut out of a finished day,
+  // the organiser can still correct the team card.
+  const rule = scoreWriteRule(event.status, via.startsWith("admin:"));
+  if (!rule.allowed) throw new ApiError(409, rule.message, rule.code);
 
   const holes = await getEventHoles(body.eventId);
   const hole = holes.find((h) => h.holeNumber === body.holeNumber);

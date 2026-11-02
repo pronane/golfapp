@@ -17,7 +17,8 @@
     "setup": "node install/setup.mjs all",
     "gallery": "node demo/build-gallery.mjs",
     "seed:dump": "tsx scripts/demo-sql.ts dump",
-    "seed:import": "tsx scripts/demo-sql.ts import"
+    "seed:import": "tsx scripts/demo-sql.ts import",
+    "e2e:formats": "node e2e/all-formats.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

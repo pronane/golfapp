@@ -17,3 +17,27 @@ export const STATUS_STYLE: Record<string, string> = {
   COMPLETED: "bg-ink/5 text-ink/70 ring-ink/10",
   CANCELLED: "bg-rose-50 text-rose-700 ring-rose-200",
 };
+
+/**
+ * May this person write to a card at all?
+ *
+ * A draft or a cancelled golf day takes no scores from anybody. A completed one
+ * is shut to the field - no group link, no player - but the organiser can still
+ * amend a card, because a wrong number still has to be fixable after the prizes
+ * are handed out. Every organiser change is written to `score_audit`.
+ *
+ * Kept here (client-safe, no database) so the rule is stated once and can be
+ * unit tested, rather than being repeated inside two route handlers. `status` is
+ * a plain string because it arrives from the database row.
+ */
+export type ScoreWriteRule = { allowed: true } | { allowed: false; code: string; message: string };
+
+export function scoreWriteRule(status: string, isAdmin: boolean): ScoreWriteRule {
+  if (status === "DRAFT" || status === "CANCELLED") {
+    return { allowed: false, code: "event_closed", message: "Scoring is not open for this event" };
+  }
+  if (status === "COMPLETED" && !isAdmin) {
+    return { allowed: false, code: "event_completed", message: "This event is complete - scores are locked" };
+  }
+  return { allowed: true };
+}

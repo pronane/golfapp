@@ -6,6 +6,8 @@ import { ApiError, getEventAccess, json, parseJson, route } from "@/lib/http";
 import { bumpRevision, getEventById } from "@/lib/events";
 import { newId } from "@/lib/ids";
 import { stablefordPoints } from "@/lib/scoring";
+import { isScrambleFormat } from "@/lib/scramble";
+import { scoreWriteRule } from "@/lib/status";
 import { strokesReceived } from "@/lib/handicap";
 import { scoreSchema, validate } from "@/lib/validate";
 
@@ -22,9 +24,13 @@ export const POST = route(async (request: Request) => {
   const user = await getCurrentUser();
   const event = await getEventById(body.eventId);
   if (!event) throw new ApiError(404, "Event not found", "not_found");
-  if (event.status === "COMPLETED") throw new ApiError(409, "This event is complete - scores are locked", "event_completed");
   if (event.status === "DRAFT" || event.status === "CANCELLED") {
     throw new ApiError(409, "Scoring is not open for this event", "event_closed");
+  }
+  // A Texas scramble is one card per team, not one per player: accepting
+  // individual scores here would silently post numbers the board never shows.
+  if (isScrambleFormat(event.format)) {
+    throw new ApiError(409, "This golf day is scored as a team card", "not_individual_format");
   }
 
   const [registration] = await db
@@ -55,6 +61,10 @@ export const POST = route(async (request: Request) => {
     else if (user.playerId === body.playerId) { authorised = true; via = "player"; }
   }
   if (!authorised) throw new ApiError(403, "You cannot update this score", "forbidden");
+  // A finished golf day is closed to the field; the organiser may still correct
+  // a card, and the change is written to score_audit against their user id.
+  const rule = scoreWriteRule(event.status, via.startsWith("admin:"));
+  if (!rule.allowed) throw new ApiError(409, rule.message, rule.code);
 
   const [hole] = await db
     .select()
