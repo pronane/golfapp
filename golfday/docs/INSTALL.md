@@ -53,7 +53,8 @@ by the app itself. That is a deliberate choice, not an omission:
 
 * nothing to install, nothing to keep running, no port, no password, no scheduled backup;
 * the schema is plain SQL (`src/db/schema.sql`), so "create all the tables from source" is
-  `npm run db:push`, which the installer runs for you;
+  `npm run db:push`, which the installer runs for you - and it is additive and idempotent, so it is
+  also the upgrade step after an update (it adds columns, never drops anything);
 * the same driver talks to a hosted libSQL/Turso database if you outgrow the file.
 
 To use a different database, set `DATABASE_URL` in `.env` before running the installer:

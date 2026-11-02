@@ -30,3 +30,9 @@ jobs:
         run: npm run db:reset
       - name: Build
         run: npm run build
+      # An app newer than its database is the failure that reached production
+      # once: boot, then `no such column` on every page. This boots the real
+      # build against a database that predates the columns and expects it to
+      # repair itself, on boot and again at runtime.
+      - name: Upgrade a database that is behind
+        run: npm run e2e:upgrade

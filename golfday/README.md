@@ -85,6 +85,7 @@ npm test           # 158 unit tests
 npm run e2e        # the browser click-through (own database, own server)
 npm run e2e:friends # the friends' day: no society, hand-typed course, cash entry
 npm run e2e:formats # every event type, 19 players, all 18 holes, 3,190 checks, no browser needed
+npm run e2e:upgrade # boot the built app against a database older than the build
 npm run setup      # env + schema + launchers + checks, no browser run
 ```
 
@@ -341,7 +342,18 @@ npm run seed:import                            # …or whatever DATABASE_URL poi
 npm run seed:dump                              # regenerate it from a seeded database
 ```
 
-Health check: `GET /api/health` reports `{ ok, db, schema, players }` - it is what the Render
-blueprint in [`render.yaml`](render.yaml) watches, and the first thing to read when a fresh deploy
-shows an empty site (`schema: "empty"` means `npm run db:push` has not been run against that
-database).
+Health check: `GET /api/health` reports `{ ok, db, schema, players, missingColumns }` - it is what
+the Render blueprint in [`render.yaml`](render.yaml) watches, and the first thing to read when a
+fresh deploy shows an empty site (`schema: "empty"` means `npm run db:push` has not been run
+against that database; `schema: "behind"` lists columns this build needs and that database has not
+got).
+
+### Upgrading a database that already has data
+
+`npm run db:push` is additive and idempotent: it creates any missing table and adds any missing
+column (`ALTER TABLE ... ADD COLUMN`), and never drops, renames or retypes anything. The same run
+happens automatically at boot when `AUTO_PUSH_SCHEMA=1`, and again at runtime if a query ever meets
+a missing column - so a deployment cannot come up "green" and then fail every page with
+`no such column`. Two tests keep it honest in CI: `tests/schema-drift.test.ts` fails if a column is
+added to `schema.ts` without a way for an existing database to get it (or if `seed/demo.sql` goes
+stale), and `tests/bootstrap.test.ts` upgrades a database that is deliberately behind.

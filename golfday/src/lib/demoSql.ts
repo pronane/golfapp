@@ -47,6 +47,9 @@ export const DEMO_TABLES = [
   "side_game_entries",
   "event_payments",
   "payment_refunds",
+  // Not demo content, but it lives in the same database: a reset should clear a
+  // dry-run inbox rather than leave last week's invitations in the console.
+  "mail_outbox",
 ] as const;
 
 /** A SQLite string literal: double the quotes, and keep newlines as they are. */

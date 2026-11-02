@@ -31,6 +31,9 @@ const setFlags = (values: { AUTO_PUSH_SCHEMA?: string; DEMO_AUTOSEED?: string })
 
 const count = async (table: string) => Number((await client.execute(`select count(*) as n from ${table}`)).rows[0]?.n ?? 0);
 
+const columnNames = async (table: string) =>
+  (await client.execute(`PRAGMA table_info(${table})`)).rows.map((row) => String(row.name));
+
 beforeAll(async () => {
   bootstrap = await import("@/lib/bootstrap");
   client = (await import("@/db/client")).client;
@@ -75,6 +78,32 @@ describe("a database nobody has prepared", () => {
     expect(await count("users")).toBe(4); // admin, sam, priya + one organiser-only account
     const gone = await client.execute("select count(*) as n from users where id = 'u-real'");
     expect(Number(gone.rows[0].n)).toBe(0);
+  });
+
+  it("adds a column this build needs to a database that already existed", async () => {
+    // The production incident: a demo database created before `flights` and
+    // `hide_board` existed. It booted, reported success, and every page that
+    // read an event settings row threw `no such column: "flights"`.
+    setFlags({ AUTO_PUSH_SCHEMA: "1" });
+    await client.execute("alter table event_settings drop column flights");
+    await client.execute("alter table event_settings drop column hide_board");
+    expect(await columnNames("event_settings")).not.toContain("flights");
+
+    const result = await bootstrap.ensureDatabase();
+
+    expect(await columnNames("event_settings")).toContain("flights");
+    expect(await columnNames("event_settings")).toContain("hide_board");
+    expect(result.addedColumns).toEqual(expect.arrayContaining(["event_settings.flights", "event_settings.hide_board"]));
+    expect(result.missingColumns).toEqual([]);
+    expect(result.error).toBeUndefined();
+  });
+
+  it("is a cheap no-op on a database that is already current", async () => {
+    setFlags({ AUTO_PUSH_SCHEMA: "1" });
+    const result = await bootstrap.ensureDatabase();
+    expect(result.addedColumns).toEqual([]);
+    expect(result.missingColumns).toEqual([]);
+    expect(result.action).toBe("nothing");
   });
 
   it("reports a database it cannot reach instead of throwing at boot", async () => {
