@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { LeaderboardPayload } from "@/lib/leaderboard";
+import type { LeaderboardPayload, LeaderboardPayloadWithHidden } from "@/lib/leaderboard";
 import { formatEventDate, formatToPar, ordinal } from "@/lib/format";
 import { GamesPanels, SponsorStrip } from "./GamesPanels";
+import { ShareButton } from "./ShareButton";
 import { LiveDot, Trophy } from "./Icons";
 import { useLiveBoard } from "./useLiveBoard";
 
@@ -32,8 +33,43 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
   const teams = data.teams ?? [];
   const isStableford = data.event.format === "STABLEFORD" || scramble;
   const started = scramble ? teams.some((t) => t.thru > 0) : data.standings.some((s) => s.thru > 0);
+  const hidden = (data as LeaderboardPayloadWithHidden).hidden;
 
   if (tv) return <TvBoard data={data} changed={changed} live={status === "live"} />;
+
+  // The organiser has asked for the board to stay shut until cards are in.
+  if (hidden) {
+    return (
+      <div className="space-y-4">
+        <header className="hero overflow-hidden rounded-2xl shadow-card ring-1 ring-inset ring-fairway-200/70">
+          <div className="px-5 py-6 sm:px-7">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fairway-700/70">
+              {data.event.status === "IN_PROGRESS" ? "Under way" : "Leaderboard"}
+            </div>
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">{data.event.name}</h1>
+            <p className="mt-1 text-[13px] hero-muted">
+              {data.event.courseName ?? "Course TBC"} · {formatEventDate(data.event.date)} · {data.event.startTime}
+            </p>
+          </div>
+        </header>
+        <div className="card card-pad text-center">
+          <h2 className="text-[16px] font-bold">The board is hidden until the cards are in</h2>
+          <p className="mx-auto mt-1 max-w-lg text-[13.5px] text-ink/60">{hidden.reason}</p>
+          <p className="mt-3 font-mono text-[22px] font-extrabold">
+            {hidden.played}
+            <span className="text-ink/30"> / {hidden.needed}</span>
+          </p>
+          <p className="text-[12px] text-ink/45">holes on your card</p>
+          <p className="mt-4 text-[12.5px] text-ink/50">
+            Finish your round and the whole leaderboard appears. Nobody else can see it either - that is the point.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <ShareButton path={`/live/${data.event.slug}`} message={`${data.event.name} - live golf`} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -71,9 +107,15 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
           <span>{data.holes.length} holes</span>
           <span className="text-fairway-800/25">|</span>
           <span>{data.stats.leader ? `Leader: ${data.stats.leader}` : "Awaiting first card"}</span>
-          <button onClick={() => setShowCards((v) => !v)} className="ml-auto rounded-lg bg-white/70 px-2.5 py-1 text-[11.5px] font-semibold text-fairway-900 ring-1 ring-inset ring-fairway-200 hover:bg-white">
+          <button onClick={() => setShowCards((v) => !v)} className="rounded-lg bg-white/70 px-2.5 py-1 text-[11.5px] font-semibold text-fairway-900 ring-1 ring-inset ring-fairway-200 hover:bg-white">
             {showCards ? "Hide cards" : "Show hole-by-hole"}
           </button>
+          <ShareButton
+            path={`/live/${data.event.slug}`}
+            message={`${data.event.name} - live leaderboard`}
+            className="ml-auto rounded-lg bg-white/70 px-2.5 py-1 text-[11.5px] font-semibold text-fairway-900 ring-1 ring-inset ring-fairway-200 hover:bg-white"
+            label="Share"
+          />
         </div>
       </header>
 
@@ -173,6 +215,44 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
           </div>
         )}
       </div>
+
+      {data.flights && data.flights.length > 0 && (
+        <section className="card card-pad">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 className="text-[15px] font-bold">Flights</h2>
+              <p className="text-[12.5px] text-ink/50">
+                The field split by playing handicap - each flight has its own prize.
+              </p>
+            </div>
+            <span className="text-[11.5px] text-ink/40">{data.flights.length} flights</span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.flights.map((flight) => (
+              <div key={flight.name} className="rounded-xl bg-ink/[0.03] p-3">
+                <div className="flex items-baseline justify-between">
+                  <h3 className="text-[13px] font-bold">{flight.name}</h3>
+                  <span className="text-[11px] text-ink/45">{flight.standings.length} players</span>
+                </div>
+                <ol className="mt-2 space-y-1">
+                  {flight.standings.map((row) => (
+                    <li key={row.playerId} className="flex items-center gap-2 text-[12.5px]">
+                      <span className="w-6 text-center font-mono text-[11.5px] font-bold text-ink/50">
+                        {row.thru === 0 ? "–" : row.tied ? `T${row.position}` : row.position}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{row.playerName}</span>
+                      <span className="font-mono text-[11.5px] text-ink/45">PH {row.playingHandicap}</span>
+                      <span className="w-10 text-right font-mono text-[12.5px] font-extrabold">
+                        {row.thru === 0 ? "–" : isStableford ? row.points : formatToPar(row.netToPar)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {showCards && (
         <div className="card overflow-x-auto p-4">

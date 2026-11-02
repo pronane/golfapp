@@ -177,8 +177,30 @@ CREATE TABLE IF NOT EXISTS event_settings (
   -- CASH | STRIPE: how an entry fee is collected. Cash is the default, because
   -- most golf days are settled on the day.
   payment_mode TEXT NOT NULL DEFAULT 'CASH',
+  -- 0 = one board; 2-6 = split the field by handicap into that many flights.
+  flights INTEGER NOT NULL DEFAULT 0,
+  -- Anti-cheat: hide the board from players until they have carded every hole.
+  hide_board INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
+
+-- Every message GolfDay composes, whether or not a mail transport is set up.
+CREATE TABLE IF NOT EXISTS mail_outbox (
+  id TEXT PRIMARY KEY,
+  event_id TEXT,
+  to_email TEXT NOT NULL,
+  to_name TEXT,
+  kind TEXT NOT NULL DEFAULT 'INVITE',
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'QUEUED',
+  provider_id TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (current_timestamp),
+  sent_at TEXT
+);
+CREATE INDEX IF NOT EXISTS mail_outbox_event_idx ON mail_outbox (event_id);
+CREATE INDEX IF NOT EXISTS mail_outbox_created_idx ON mail_outbox (created_at);
 
 CREATE TABLE IF NOT EXISTS event_pairs (
   id TEXT PRIMARY KEY,

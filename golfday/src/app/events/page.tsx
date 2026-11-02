@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { listPublicEvents, STATUS_LABEL, STATUS_STYLE } from "@/lib/events";
+import { formatLabel } from "@/lib/status";
 import { formatEventDate } from "@/lib/format";
 import { JoinByCode } from "@/components/JoinByCode";
 import { LiveDot } from "@/components/Icons";
@@ -56,7 +57,7 @@ export default async function EventsPage() {
                   {event.description && <p className="mt-1.5 line-clamp-2 text-[13px] text-ink/50">{event.description}</p>}
                   <div className="mt-2.5 flex flex-wrap gap-2 text-[12px]">
                     <span className="pill bg-ink/[0.04] text-ink/60 ring-ink/10">{Number(playerCount)} entered</span>
-                    <span className="pill bg-ink/[0.04] text-ink/60 ring-ink/10">{event.format === "STABLEFORD" ? "Stableford" : "Stroke play"}</span>
+                    <span className="pill bg-ink/[0.04] text-ink/60 ring-ink/10">{formatLabel(event.format)}</span>
                     <span className="pill bg-ink/[0.04] text-ink/60 ring-ink/10">{event.handicapAllowance}% allowance</span>
                   </div>
                 </div>

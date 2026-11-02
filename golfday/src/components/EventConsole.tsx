@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import { BLANK_CARD, CourseCardEditor, type CardHole } from "./CourseCardEditor";
 import { CopyButton } from "./CopyButton";
 import { GamesConsole } from "./GamesConsole";
+import { InvitesPanel } from "./InvitesPanel";
+import { MasterScorecard } from "./MasterScorecard";
+import { ShareButton } from "./ShareButton";
 import { PaymentsPanel } from "./PaymentsPanel";
 import { STATUS_LABEL, STATUS_STYLE } from "@/lib/status";
 import { SELECTABLE_PROVENANCES, provenanceMeta } from "@/lib/handicapProvenance";
@@ -76,6 +79,8 @@ const TABS = [
   { id: "groups", label: "Groups" },
   { id: "card", label: "Card" },
   { id: "games", label: "Games" },
+  { id: "scoring", label: "Scorecards" },
+  { id: "invites", label: "Invites" },
   { id: "payments", label: "Payments" },
   { id: "admins", label: "Admins" },
 ] as const;
@@ -286,7 +291,10 @@ export function EventConsole(props: Props) {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[11.5px] text-ink/45">Completed events lock scoring. Draft events are hidden from the public list.</p>
+              <p className="mt-2 text-[11.5px] text-ink/45">
+                Completed events lock scoring for the field - you can still correct a card in the Scorecards tab, and
+                every change is recorded. Draft events are hidden from the public list.
+              </p>
             </section>
 
             <section className="card card-pad">
@@ -306,6 +314,14 @@ export function EventConsole(props: Props) {
                   </div>
                   <CopyButton value={`/live/${props.event.slug}`} />
                 </div>
+                <ShareButton
+                  path={`/live/${props.event.slug}`}
+                  message={`Follow ${props.event.name} live`}
+                  className="btn-secondary btn-sm w-full"
+                />
+                <Link href={`/admin/events/${props.event.id}/print`} className="btn-secondary btn-sm w-full">
+                  Print cart signs &amp; QR codes
+                </Link>
                 <a href={`/api/events/${props.event.id}/export`} className="btn-secondary btn-sm w-full">Download results CSV</a>
               </div>
             </section>
@@ -690,6 +706,16 @@ export function EventConsole(props: Props) {
               groupId: r.registration.groupId,
             }))}
         />
+      )}
+
+      {tab === "scoring" && (
+        <MasterScorecard eventId={props.event.id} scramble={props.event.format === "TEXAS_SCRAMBLE"} />
+      )}
+
+      {tab === "invites" && (
+        <section className="card card-pad">
+          <InvitesPanel eventId={props.event.id} />
+        </section>
       )}
 
       {tab === "payments" && <PaymentsPanel eventId={props.event.id} />}
