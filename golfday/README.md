@@ -81,9 +81,10 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # 122 unit tests
+npm test           # 144 unit tests
 npm run e2e        # the browser click-through (own database, own server)
 npm run e2e:friends # the friends' day: no society, hand-typed course, cash entry
+npm run e2e:formats # every event type, 19 players, all 18 holes, no browser needed
 npm run setup      # env + schema + launchers + checks, no browser run
 ```
 

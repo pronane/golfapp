@@ -660,6 +660,14 @@ export async function setPlayerGroup(input: {
   const event = await getEventById(input.eventId);
   if (!event) throw new ApiError(404, "Event not found", "not_found");
 
+  // Four-balls are self-service right up to the tee. After that the groups are
+  // what every card, four-ball and team prize is keyed to, so moving somebody
+  // is the organiser's call (a late arrival, a no-show) - and a completed day
+  // accepts no changes from the field at all.
+  if (!input.isAdmin && event.status !== "OPEN") {
+    throw new ApiError(409, "Tee groups are locked once the round starts", "groups_locked");
+  }
+
   const [registration] = await db
     .select()
     .from(eventPlayers)
