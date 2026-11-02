@@ -465,8 +465,16 @@ async function runFormat(ctx, config) {
     });
     const size = (groupId) =>
       data.registrations.filter((r) => r.registration.groupId === groupId && r.player.id !== me.player.id).length;
-    const target = data.groups.find((g) => g.id !== me.registration.groupId && size(g.id) < 4);
+    const target = data.groups
+      .filter((g) => g.id !== me.registration.groupId && size(g.id) < 4)
+      .sort((a, b) => size(a.id) - size(b.id))[0];
     if (!target) {
+      // Every other group is a full four-ball: put him back where he was, so the
+      // field stays intact for the scoring checks below.
+      await call("POST", `/api/events/${event.id}/groups/${me.registration.groupId}`, {
+        cookie: signedIn,
+        body: { playerId: me.player.id, action: "add" },
+      });
       note("every other group is a full four-ball - skipped the self-service move");
       return;
     }
@@ -951,6 +959,150 @@ async function runFormat(ctx, config) {
       note("nearest the pin 4.25 ft, longest drive 312 yd, both leading");
     });
   }
+
+  await step("invitations, QR codes, flights, the hidden board and the master scorecard", async () => {
+    const data = await bundle(adminCookie, event.id);
+
+    // 1. Invitations. No mail provider is configured in this run, so every
+    //    message must come back as a recorded dry run - never a fake "sent".
+    const invites = await call("POST", `/api/events/${event.id}/invites`, { cookie: adminCookie });
+    must(invites.status === 200, `sending invitations failed (${invites.status}) ${JSON.stringify(invites.body)}`);
+    check(invites.body.delivered === false, "the run has a mail provider configured - the dry-run check is meaningless");
+    check(
+      invites.body.dryRun + invites.body.noEmail.length === FIELD_SIZE,
+      `invitations covered ${invites.body.dryRun} + ${invites.body.noEmail.length} players, expected ${FIELD_SIZE}`,
+    );
+    check(invites.body.failed === 0, `${invites.body.failed} invitations failed to compose`);
+    const outbox = await call("GET", `/api/events/${event.id}/invites`, { cookie: adminCookie });
+    check(outbox.body.messages.length > 0, "nothing was written to the mail outbox");
+    check(
+      outbox.body.messages.every((row) => row.status === "DRY_RUN" || row.status === "SENT"),
+      "the outbox contains a message in an unexpected state",
+    );
+    const grouped = invites.body.results.filter((row) => row.seat.group);
+    check(grouped.length > 0, "no invitation names a tee group");
+    check(
+      grouped.every((row) => row.seat.teeTime && /^\d{2}:\d{2}$/.test(row.seat.teeTime)),
+      "an invitation is missing its tee time",
+    );
+    // A player must not be able to blast the field.
+    const asPlayer = await call("POST", `/api/events/${event.id}/invites`, { cookie: playerCookies.sam });
+    check(asPlayer.status === 403, `a non-admin could send invitations (${asPlayer.status})`);
+    note(`${invites.body.dryRun} invitations written, ${invites.body.noEmail.length} players had no address`);
+
+    // 2. QR codes for the printed cart signs.
+    const group = data.groups[0];
+    const qr = await call("GET", `/api/events/${event.id}/qr?group=${group.id}`, { cookie: adminCookie, text: true });
+    check(qr.status === 200, `the QR route returned ${qr.status}`);
+    check(qr.body.startsWith("<svg") && qr.body.includes("</svg>"), "the QR code is not an SVG");
+    const qrAnon = await call("GET", `/api/events/${event.id}/qr?group=${group.id}`, { text: true });
+    check(qrAnon.status === 401 || qrAnon.status === 403, `a stranger could fetch the scorecard QR (${qrAnon.status})`);
+    const printPage = await call("GET", `/admin/events/${event.id}/print`, { cookie: adminCookie, text: true });
+    check(printPage.status === 200 && printPage.body.includes(group.name), `the printable cart signs page returned ${printPage.status}`);
+    const printAnon = await call("GET", `/admin/events/${event.id}/print`, { text: true });
+    check(printAnon.status === 307 || printAnon.status === 308 || printAnon.status === 302, `a stranger opened the print page (${printAnon.status})`);
+
+    // 3. The master scorecard sees every card.
+    const cards = await call("GET", `/api/events/${event.id}/cards`, { cookie: adminCookie });
+    must(cards.status === 200, `the master scorecard returned ${cards.status}`);
+    const cardCount = config.format === "TEXAS_SCRAMBLE" ? cards.body.teams.length : cards.body.cards.length;
+    check(cardCount === (config.format === "TEXAS_SCRAMBLE" ? groups.length : FIELD_SIZE), `the master scorecard lists ${cardCount} cards`);
+    const audit = await call("GET", `/api/events/${event.id}/audit`, { cookie: adminCookie });
+    check(audit.status === 200, `the audit trail returned ${audit.status}`);
+    check(Array.isArray(audit.body.amendments), "the audit trail has no amendments list");
+
+    // 4. Flights (individual formats only - a scramble is one team board).
+    if (config.format !== "TEXAS_SCRAMBLE") {
+      const enabled = await call("PUT", `/api/events/${event.id}/games`, {
+        cookie: adminCookie,
+        body: { skins: "NET", skinsCarry: true, teamFormat: "FOURBBB", sideHoles: [], sponsors: [], matches: [], flights: 3 },
+      });
+      must(enabled.status === 200, `enabling flights failed (${enabled.status}) ${JSON.stringify(enabled.body)}`);
+      const board = (await call("GET", `/api/events/${event.id}/leaderboard`)).body;
+      must(Array.isArray(board.flights), "the board has no flights");
+      check(board.flights.length === 3, `expected 3 flights, got ${board.flights.length}`);
+      check(
+        board.flights.map((f) => f.standings.length).join("/") === "7/6/6",
+        `flights are ${board.flights.map((f) => f.standings.length).join("/")}, expected 7/6/6`,
+      );
+      const key = config.format === "STABLEFORD" ? "points" : "netToPar";
+      for (const flight of board.flights) {
+        check(flight.standings[0].position === 1, `${flight.name} does not start at 1st`);
+        const values = flight.standings.map((row) => row[key]);
+        const sorted = [...values].sort((a, b) => (config.format === "STABLEFORD" ? b - a : a - b));
+        check(values.join() === sorted.join(), `${flight.name} is out of order: ${values.join(", ")}`);
+      }
+      const handicapSpread = board.flights.map((f) => f.standings.map((row) => row.playingHandicap));
+      check(
+        Math.max(...handicapSpread[0]) <= Math.min(...handicapSpread.at(-1)),
+        "the low-handicap flight overlaps the high-handicap flight",
+      );
+      note(`flights: ${board.flights.map((f) => f.standings.length).join("/")}`);
+    }
+
+    // 5. Hide the board until a card is in.
+    const hidden = await call("PUT", `/api/events/${event.id}/games`, {
+      cookie: adminCookie,
+      body: {
+        skins: "NET",
+        skinsCarry: true,
+        teamFormat: "FOURBBB",
+        sideHoles: [],
+        sponsors: [],
+        matches: [],
+        flights: 0,
+        hideBoard: true,
+      },
+    });
+    must(hidden.status === 200, `enabling the hidden board failed (${hidden.status})`);
+    const anonymous = (await call("GET", `/api/events/${event.id}/leaderboard`)).body;
+    check(Boolean(anonymous.hidden), "a stranger still saw the board with hideBoard on");
+    check(anonymous.standings.length === 0, "the hidden board still lists players");
+    check(anonymous.groups.every((g) => g.players.length === 0), "the hidden board still lists who is in each group");
+    check(anonymous.games.skins === null, "the hidden board still shows the skins");
+    const asAdmin = (await call("GET", `/api/events/${event.id}/leaderboard`, { cookie: adminCookie })).body;
+    const adminRows = config.format === "TEXAS_SCRAMBLE" ? asAdmin.teams.length : asAdmin.standings.length;
+    check(!asAdmin.hidden && adminRows > 0, "the organiser could not see their own board");
+    // Put it back so the rest of the run behaves normally.
+    await call("PUT", `/api/events/${event.id}/games`, {
+      cookie: adminCookie,
+      body: { skins: "NET", skinsCarry: true, teamFormat: "FOURBBB", sideHoles: [], sponsors: [], matches: [], flights: 0, hideBoard: false },
+    });
+    note("hidden board: strangers redacted, organiser unaffected");
+
+    // 6. The clubhouse screen credits the sponsors, and the share button is a
+    //    plain WhatsApp deep link - no business API, no Meta app in the path.
+    const sponsored = await call("PUT", `/api/events/${event.id}/games`, {
+      cookie: adminCookie,
+      body: {
+        skins: "NET",
+        skinsCarry: true,
+        teamFormat: "FOURBBB",
+        sideHoles: [],
+        sponsors: [{ name: "Checkers Gin" }],
+        matches: [],
+        flights: 0,
+        hideBoard: false,
+      },
+    });
+    must(sponsored.status === 200, `adding a sponsor failed (${sponsored.status})`);
+    const livePage = await call("GET", `/live/${event.slug}`, { text: true });
+    check(livePage.status === 200, `the live board returned ${livePage.status}`);
+    check(livePage.body.includes("Checkers Gin"), "the sponsor is missing from the live board");
+    const tvPage = await call("GET", `/live/${event.slug}?tv=1`, { text: true });
+    check(tvPage.body.includes("Checkers Gin"), "the sponsor is missing from the clubhouse TV board");
+    check(livePage.body.includes("https://wa.me/?text="), "the live board has no WhatsApp share link");
+    check(
+      !/api\.whatsapp\.com|graph\.facebook\.com|whatsapp_business/i.test(livePage.body),
+      "the share link goes through a WhatsApp business API",
+    );
+    check(livePage.body.includes("Copy link"), "the share button has no copy fallback for a laptop");
+    await call("PUT", `/api/events/${event.id}/games`, {
+      cookie: adminCookie,
+      body: { skins: "NET", skinsCarry: true, teamFormat: "FOURBBB", sideHoles: [], sponsors: [], matches: [], flights: 0, hideBoard: false },
+    });
+    note("sponsors on both boards; WhatsApp share is a wa.me deep link with a copy fallback");
+  });
 
   await step("CSV export and the public board agree", async () => {
     const csv = await call("GET", `/api/events/${event.id}/export`, { cookie: adminCookie, text: true });

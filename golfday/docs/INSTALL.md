@@ -16,6 +16,7 @@ Afterwards:
 | Open | <http://localhost:3000> |
 | Sign in | `admin@golfday.app` · `golfday123` (organiser) |
 | Re-run the checks | `npm run e2e`, `npm run e2e:friends`, `npm run e2e:formats` |
+| Email invitations | optional - see [`INVITATIONS.md`](INVITATIONS.md); without it messages are written, not sent |
 
 The installer is safe to run again: it never overwrites `.env`, never wipes your database,
 and the end-to-end run uses its own throwaway database file.

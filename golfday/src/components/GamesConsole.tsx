@@ -23,6 +23,8 @@ const EMPTY: GameSettings = {
   matches: [],
   entryFeePence: 0,
   paymentMode: "CASH",
+  flights: 0,
+  hideBoard: false,
 };
 
 /**
@@ -294,6 +296,49 @@ export function GamesConsole({ eventId, holeCount, players }: Props) {
               Add
             </button>
           </div>
+        </section>
+
+        <section className="card card-pad space-y-3">
+          <h2 className="text-[15px] font-bold">Flights and the board</h2>
+          <p className="text-[12.5px] text-ink/60">
+            With a wide spread of handicaps one player runs away with it. Flights cut the field into bands by playing
+            handicap and give each band its own table, so everybody has something to play for.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-4">
+            {[0, 2, 3, 4].map((count) => (
+              <button
+                key={count}
+                disabled={busy}
+                onClick={() => void save({ ...settings, flights: count }, count ? `${count} flights` : "One board")}
+                className={`rounded-xl px-3 py-2 text-[12.5px] font-semibold transition ${
+                  settings.flights === count
+                    ? "bg-fairway-300 text-fairway-950 ring-1 ring-inset ring-fairway-400/70"
+                    : "bg-ink/[0.04] text-ink/60 hover:bg-ink/[0.07]"
+                }`}
+              >
+                {count ? `${count} flights` : "One board"}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11.5px] text-ink/45">
+            Only applies to Stableford and stroke play - a scramble is played as one team board.
+          </p>
+          <label className="flex items-start gap-2 rounded-xl bg-ink/[0.03] p-3 text-[12.5px]">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded accent-fairway-700"
+              checked={settings.hideBoard}
+              disabled={busy}
+              onChange={(e) => void save({ ...settings, hideBoard: e.target.checked }, e.target.checked ? "Board hidden until cards are in" : "Board visible to everyone")}
+            />
+            <span>
+              <span className="block font-semibold">Hide the board until a player&apos;s card is in</span>
+              <span className="block text-[11.5px] text-ink/50">
+                Stops the field score-watching each other. Organisers always see it, and it opens up once the day is
+                completed. Nobody can see anybody&apos;s scores before their own card is finished.
+              </span>
+            </span>
+          </label>
         </section>
 
         <section className="card card-pad space-y-3">

@@ -1,5 +1,5 @@
 import { getEventById, getRevision } from "@/lib/events";
-import { buildLeaderboard, canViewEventBoard } from "@/lib/leaderboard";
+import { boardVisibility, buildLeaderboard, canViewEventBoard, redactBoard } from "@/lib/leaderboard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,9 +50,11 @@ export async function GET(request: Request, ctx: Ctx) {
               close();
               return;
             }
+            const visibility = await boardVisibility(board, id);
+            const visible = visibility.visible ? board : redactBoard(board, visibility);
             const payload = lite
-              ? { ...board, standings: board.standings.filter((s) => s.thru > 0).slice(0, 5) }
-              : board;
+              ? { ...visible, standings: visible.standings.filter((s) => s.thru > 0).slice(0, 5) }
+              : visible;
             send("leaderboard", payload);
           } else {
             controller.enqueue(encoder.encode(`: keep-alive ${Date.now()}\n\n`));

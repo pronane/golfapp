@@ -6,6 +6,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { eventPairs, eventSettings, sideGameEntries } from "@/db/schema";
 import { newId } from "./ids";
+import { cleanFlightCount } from "./flights";
 import type { Standing } from "./scoring";
 import {
   computeSkins,
@@ -41,6 +42,10 @@ export type GameSettings = {
   entryFeePence: number;
   /** CASH: collect on the day. STRIPE: pay by card online. */
   paymentMode: PaymentMode;
+  /** 0 = one board; 2-6 = split the field by handicap into that many flights. */
+  flights: number;
+  /** Anti-cheat: hide the board from players until they have carded every hole. */
+  hideBoard: boolean;
 };
 
 /** How an entry fee is collected. Cash keeps an outing a cash outing. */
@@ -56,6 +61,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   matches: [],
   entryFeePence: 0,
   paymentMode: "CASH",
+  flights: 0,
+  hideBoard: false,
 };
 
 const SKINS = new Set(["OFF", "NET", "GROSS"]);
@@ -133,6 +140,8 @@ export function cleanSettings(raw: Partial<Record<keyof GameSettings, unknown>>,
     matches,
     entryFeePence,
     paymentMode,
+    flights: cleanFlightCount(raw.flights),
+    hideBoard: Boolean(raw.hideBoard),
     skins: typeof raw.skins === "string" && SKINS.has(raw.skins) ? (raw.skins as SkinsMode) : "OFF",
     skinsCarry: raw.skinsCarry === undefined ? true : Boolean(raw.skinsCarry),
     teamFormat:
@@ -155,6 +164,8 @@ export async function getGameSettings(eventId: string): Promise<GameSettings> {
     matches: parseJsonArray(row.matches),
     entryFeePence: row.entryFeePence,
     paymentMode: row.paymentMode,
+    flights: row.flights,
+    hideBoard: row.hideBoard,
   }, 36);
 }
 
@@ -169,6 +180,8 @@ export async function saveGameSettings(eventId: string, settings: GameSettings):
     matches: JSON.stringify(settings.matches),
     entryFeePence: settings.entryFeePence,
     paymentMode: settings.paymentMode,
+    flights: settings.flights,
+    hideBoard: settings.hideBoard,
     updatedAt: new Date().toISOString(),
   };
   await db
@@ -242,7 +255,10 @@ export async function deleteEventGames(eventId: string) {
 
 export type GamesPayload = {
   /** public subset: the match list and fee are summarised below instead */
-  settings: Pick<GameSettings, "skins" | "skinsCarry" | "teamFormat" | "sideHoles" | "sponsors" | "teamNames">;
+  settings: Pick<
+    GameSettings,
+    "skins" | "skinsCarry" | "teamFormat" | "sideHoles" | "sponsors" | "teamNames" | "flights" | "hideBoard"
+  >;
   matchPlay: TeamMatchBoard | null;
   skins: SkinsResult | null;
   pairs: PairStanding[] | null;
@@ -310,9 +326,9 @@ export async function buildGames(
     ...g,
     label: `${g.kind === "NEAREST_PIN" ? "Nearest the pin" : "Longest drive"} · hole ${g.holeNumber}`,
   }));
-  const { skins: skinsMode, skinsCarry, teamFormat, sideHoles, sponsors, teamNames } = settings;
+  const { skins: skinsMode, skinsCarry, teamFormat, sideHoles, sponsors, teamNames, flights, hideBoard } = settings;
   return {
-    settings: { skins: skinsMode, skinsCarry, teamFormat, sideHoles, sponsors, teamNames },
+    settings: { skins: skinsMode, skinsCarry, teamFormat, sideHoles, sponsors, teamNames, flights, hideBoard },
     matchPlay,
     skins,
     pairs,

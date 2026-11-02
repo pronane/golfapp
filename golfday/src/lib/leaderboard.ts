@@ -8,6 +8,7 @@ import { rankStandings, summariseRound, type Standing } from "./scoring";
 import { isScrambleFormat, type ScrambleStanding } from "./scramble";
 import { getGroupScrambleCard, loadScrambleTeams, type GroupScrambleCard } from "./scrambleScores";
 import { buildGames, getGameSettings, listSideEntries, type GamesPayload, type SideHole } from "./games";
+import { bandPlayers, splitIntoFlights } from "./flights";
 
 export type PublicEvent = {
   id: string;
@@ -37,6 +38,8 @@ export type LeaderboardPayload = {
   par: number;
   holes: { holeNumber: number; par: number; strokeIndex: number }[];
   standings: Standing[];
+  /** Flights/divisions, when the organiser split the field by handicap. */
+  flights: { name: string; index: number; standings: Standing[] }[] | null;
   /** Texas scramble: one row per team (tee group) instead of per player. */
   teams: ScrambleStanding[] | null;
   groups: LeaderboardGroup[];
@@ -193,6 +196,22 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
     rows.map((r) => ({ playerId: r.playerId, playerName: r.playerName })),
   );
 
+  // Flights are derived, never stored per player: band the field by the playing
+  // handicap it was given, then re-rank inside each band so a flight member sees
+  // "1st" in their own division. A scramble is flighted by team, which this
+  // does not do - the organiser gets one team board.
+  const rankMode = event.format === "STROKE_PLAY" ? "STROKE_PLAY" : "STABLEFORD";
+  const flights =
+    !scramble && games.settings.flights >= 2
+      ? splitIntoFlights(rows, bandPlayers(rows, games.settings.flights)).map((flight) => ({
+          name: flight.name,
+          index: flight.index,
+          // Re-rank inside the flight: a flight member is 1st in their division,
+          // not 14th overall.
+          standings: rankStandings(flight.rows, rankMode, holeInfo.length || 18),
+        }))
+      : null;
+
   return {
     event: toPublicEvent(event),
     revision: bundle.revision,
@@ -200,6 +219,7 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
     par,
     holes: holeInfo,
     standings,
+    flights,
     teams,
     groups: groupBoard,
     games,
@@ -209,6 +229,62 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
       holesInCard: holeInfo.length,
       leader,
     },
+  };
+}
+
+/**
+ * The "hide the board until your card is in" rule.
+ *
+ * Some organisers do not want the field watching each other's scores while the
+ * money holes are still being played - seeing the number you need invites a
+ * nudge. With `hide_board` on, the board is withheld from players (and from
+ * spectators, who would happily tell them) until their own card is complete.
+ * The organiser always sees it, and it opens up the moment the day is completed.
+ */
+export type BoardVisibility =
+  | { visible: true }
+  | { visible: false; reason: string; played: number; needed: number };
+
+export type LeaderboardPayloadWithHidden = LeaderboardPayload & { hidden?: { reason: string; played: number; needed: number } };
+
+/** Everything except the names and scores: safe to render to the field. */
+export function redactBoard(
+  board: LeaderboardPayload,
+  visibility: { reason: string; played: number; needed: number },
+): LeaderboardPayloadWithHidden {
+  const hidden = { reason: visibility.reason, played: visibility.played, needed: visibility.needed };
+  return {
+    ...board,
+    standings: [],
+    teams: null,
+    flights: null,
+    groups: board.groups.map((group) => ({ ...group, players: [], points: 0, holesPlayed: 0 })),
+    games: { ...board.games, skins: null, pairs: null, matchPlay: null, sideGames: [] },
+    stats: { ...board.stats, leader: null, scoresEntered: board.stats.scoresEntered },
+    hidden,
+  };
+}
+
+export async function boardVisibility(board: LeaderboardPayload, eventId: string): Promise<BoardVisibility> {
+  if (!board.games.settings.hideBoard) return { visible: true };
+  if (board.event.status === "COMPLETED" || board.event.status === "CANCELLED") return { visible: true };
+
+  const user = await getCurrentUser();
+  if (user && (await getEventAccess(eventId, user))) return { visible: true };
+
+  const needed = board.stats.holesInCard;
+  const thru = user?.playerId
+    ? board.teams
+      ? board.teams.find((team) => team.members.some((member) => member.playerId === user.playerId))?.thru ?? 0
+      : board.standings.find((row) => row.playerId === user.playerId)?.thru ?? 0
+    : 0;
+
+  if (thru >= needed && needed > 0) return { visible: true };
+  return {
+    visible: false,
+    reason: "This organiser is keeping the board hidden until every card is in.",
+    played: thru,
+    needed,
   };
 }
 

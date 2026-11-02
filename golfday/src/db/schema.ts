@@ -231,8 +231,37 @@ export const eventSettings = sqliteTable("event_settings", {
   entryFeePence: integer("entry_fee_pence").notNull().default(0),
   /** CASH = collect on the day; STRIPE = pay by card online. */
   paymentMode: text("payment_mode").notNull().default("CASH"),
+  /** 0 = one board; 2-6 = split the field by handicap into that many flights. */
+  flights: integer("flights").notNull().default(0),
+  /** Anti-cheat: hide the board from players until they have carded every hole. */
+  hideBoard: integer("hide_board", { mode: "boolean" }).notNull().default(false),
   updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
 });
+
+/**
+ * Every message GolfDay composes, kept whether or not a transport is configured.
+ *
+ * With no mail provider the row is the whole record (status DRY_RUN) - the
+ * organiser can still see exactly who was invited and what they were sent - and
+ * once RESEND_API_KEY and MAIL_FROM are set the same rows move to SENT.
+ */
+export const mailOutbox = sqliteTable("mail_outbox", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id"),
+  toEmail: text("to_email").notNull(),
+  toName: text("to_name"),
+  kind: text("kind").notNull().default("INVITE"), // INVITE | REMINDER | RESULT
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("QUEUED"), // QUEUED | SENT | DRY_RUN | FAILED
+  providerId: text("provider_id"),
+  error: text("error"),
+  createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  sentAt: text("sent_at"),
+}, (t) => ({
+  eventIdx: index("mail_outbox_event_idx").on(t.eventId),
+  createdIdx: index("mail_outbox_created_idx").on(t.createdAt),
+}));
 
 /** 4BBB pairs (two partners, better ball counts). */
 export const eventPairs = sqliteTable("event_pairs", {

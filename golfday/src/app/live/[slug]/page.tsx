@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getEventBySlug } from "@/lib/events";
-import { buildLeaderboard, canViewEventBoard } from "@/lib/leaderboard";
+import { boardVisibility, buildLeaderboard, canViewEventBoard, redactBoard } from "@/lib/leaderboard";
 import { LiveLeaderboard } from "@/components/LiveLeaderboard";
 
 export const dynamic = "force-dynamic";
@@ -36,5 +36,6 @@ export default async function LivePage({
   if (!(await canViewEventBoard(event))) notFound();
   const board = await buildLeaderboard(event.id);
   if (!board) notFound();
-  return <LiveLeaderboard initial={board} tv={tv === "1"} />;
+  const visibility = await boardVisibility(board, event.id);
+  return <LiveLeaderboard initial={visibility.visible ? board : redactBoard(board, visibility)} tv={tv === "1"} />;
 }

@@ -30,6 +30,9 @@ const ADDED_COLUMNS: string[] = [
   "ALTER TABLE users ADD COLUMN oauth_provider TEXT",
   "ALTER TABLE users ADD COLUMN oauth_subject TEXT",
   "CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_unique ON users (oauth_provider, oauth_subject)",
+  // flights and the hide-the-board anti-cheat toggle
+  "ALTER TABLE event_settings ADD COLUMN flights INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE event_settings ADD COLUMN hide_board INTEGER NOT NULL DEFAULT 0",
 ];
 
 function isDuplicateColumn(err: unknown): boolean {
