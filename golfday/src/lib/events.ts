@@ -17,6 +17,7 @@ import {
 import { ApiError } from "./http";
 import { saveCourse } from "./courses";
 import { deleteScrambleScoresForGroup } from "./scrambleScores";
+import { getGameSettings, saveGameSettings } from "./games";
 import { fetchCourse } from "./courseApi";
 import { courseHandicap, DEFAULT_TEE, parseTees, playingHandicap as calcPlayingHandicap, type Tee } from "./handicap";
 import { newId, newJoinCode, newToken, uniqueSlug } from "./ids";
@@ -294,6 +295,132 @@ export async function createEvent(input: CreateEventInput) {
   }
 
   return { id, slug };
+}
+
+/**
+ * "Run it again": the next golf day, built from the last one.
+ *
+ * The same society plays the same course on the same day of the month with the
+ * same faces. Asking an organiser to type it all in again is the reason they go
+ * back to a spreadsheet - so this copies the day (course, format, allowance,
+ * tee time, game settings, the card as it was played) and, if asked, the field
+ * and the four-balls as well.
+ *
+ * Deliberately not copied: scores, side-game entries, payments, the audit trail,
+ * the join code and the admins. The person running it again becomes the owner;
+ * nothing about the old day's money or cards follows them across.
+ */
+export async function duplicateEvent(input: {
+  sourceId: string;
+  createdBy: string;
+  /** New date (YYYY-MM-DD). Defaults to a week after the original. */
+  date?: string;
+  /** Copy the field (players re-registered, handicaps recalculated). */
+  copyField?: boolean;
+  /** Copy the tee groups and who was in them (implies the field). */
+  copyGroups?: boolean;
+  name?: string;
+}) {
+  const source = await getEventById(input.sourceId);
+  if (!source) throw new ApiError(404, "Event not found", "not_found");
+
+  const date = input.date ?? shiftDate(source.date, 7);
+  const id = newId();
+  const slug = uniqueSlug(input.name?.trim() || source.name);
+  const joinCode = newJoinCode();
+
+  await db.insert(events).values({
+    id,
+    slug,
+    name: (input.name?.trim() || source.name).trim(),
+    description: source.description,
+    date,
+    startTime: source.startTime,
+    courseId: source.courseId,
+    courseName: source.courseName,
+    format: source.format,
+    handicapAllowance: source.handicapAllowance,
+    // A repeat of a day that was being run starts open; a repeat of a draft
+    // stays a draft until it is published.
+    status: ["OPEN", "IN_PROGRESS", "COMPLETED"].includes(source.status) ? "OPEN" : "DRAFT",
+    maxPlayers: source.maxPlayers,
+    joinCode,
+    isPublic: source.isPublic,
+    createdBy: input.createdBy,
+  });
+
+  // The card is copied from this event's own snapshot, not from the course
+  // library: if the club re-measured the course since, the day that was played
+  // is still played on the card it was played on.
+  const holes = await getEventHoles(input.sourceId);
+  if (holes.length > 0) {
+    await db.insert(eventHoles).values(
+      holes.map((hole) => ({
+        id: newId(),
+        eventId: id,
+        holeNumber: hole.holeNumber,
+        par: hole.par,
+        strokeIndex: hole.strokeIndex,
+      })),
+    );
+  }
+
+  await db.insert(eventAdmins).values({ id: newId(), eventId: id, userId: input.createdBy, role: "OWNER" });
+  await db.insert(eventState).values({ eventId: id, revision: 1 });
+
+  // Same society fixture list, if the original belonged to one.
+  const [societyLink] = await db.select().from(societyEvents).where(eq(societyEvents.eventId, input.sourceId)).limit(1);
+  if (societyLink) {
+    await db.insert(societyEvents).values({ id: newId(), societyId: societyLink.societyId, eventId: id });
+  }
+
+  // Games, sponsors, flights, hide-the-board: the organiser set these up once.
+  const settings = await getGameSettings(input.sourceId);
+  await saveGameSettings(id, settings);
+
+  let entered = 0;
+  let createdGroups = 0;
+  const skipped: { name: string; reason: string }[] = [];
+  const wantField = input.copyField || input.copyGroups;
+
+  if (wantField) {
+    const sourceGroups = input.copyGroups ? await getEventGroups(input.sourceId) : [];
+    const groupMap = new Map<string, string>();
+    for (const group of sourceGroups) {
+      const copy = await createGroup(id, group.name, group.teeTime ?? undefined);
+      groupMap.set(group.id, copy.id);
+      createdGroups += 1;
+    }
+
+    const registrations = await db
+      .select({ playerId: eventPlayers.playerId, groupId: eventPlayers.groupId, status: eventPlayers.status, name: players.name })
+      .from(eventPlayers)
+      .innerJoin(players, eq(players.id, eventPlayers.playerId))
+      .where(eq(eventPlayers.eventId, input.sourceId));
+
+    for (const registration of registrations) {
+      if (registration.status !== "REGISTERED") continue;
+      try {
+        await registerPlayer({ eventId: id, playerId: registration.playerId, force: true });
+        entered += 1;
+        const newGroupId = registration.groupId ? groupMap.get(registration.groupId) : undefined;
+        if (newGroupId) await setPlayerGroup({ eventId: id, playerId: registration.playerId, groupId: newGroupId, isAdmin: true });
+      } catch (err) {
+        skipped.push({ name: registration.name, reason: err instanceof Error ? err.message : "could not be added" });
+      }
+    }
+  }
+
+  await bumpRevision(id);
+  return { id, slug, date, entered, groups: createdGroups, skipped };
+}
+
+/** `2026-11-01` + 7 days -> `2026-11-08`, without a timezone in sight. */
+function shiftDate(date: string, days: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return date;
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return shifted.toISOString().slice(0, 10);
 }
 
 /** A player may only be in one event on a given date (requirement 3 & 8). */
