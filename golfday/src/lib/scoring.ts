@@ -1,7 +1,8 @@
 import { strokesReceived } from "./handicap";
 
 export type HoleInfo = { holeNumber: number; par: number; strokeIndex: number };
-export type HoleScore = { holeNumber: number; strokes: number };
+/** One stroke as recorded. `round` is absent on single-round cards (round 1). */
+export type HoleScore = { holeNumber: number; strokes: number; round?: number };
 
 export type HoleResult = {
   holeNumber: number;
@@ -12,6 +13,8 @@ export type HoleResult = {
   net: number;
   points: number;
   toPar: number;
+  /** Which round of a multi-round event this hole belongs to (1 if single). */
+  round?: number;
 };
 
 export type RoundTotals = {
@@ -38,15 +41,19 @@ export function netStrokes(grossStrokes: number, shotsReceived: number): number 
 }
 
 /**
- * Aggregates a player's card. Missing holes are simply not counted, so a
- * leaderboard can be built while a round is in progress ("thru").
+ * Aggregates a player's card - one round, or every round of a multi-round
+ * event played so far. Missing holes are simply not counted, so a leaderboard
+ * can be built while a round is in progress ("thru"). Results come out in
+ * play order (round, then hole), which is what countback walks backwards.
  */
 export function summariseRound(
   holes: HoleInfo[],
   scores: HoleScore[],
   playingHcp: number,
 ): RoundTotals {
-  const byHole = new Map(scores.map((s) => [s.holeNumber, s.strokes]));
+  const maxRound = scores.reduce((max, s) => Math.max(max, s.round ?? 1), 1);
+  const bySlot = new Map(scores.map((s) => [`${s.round ?? 1}:${s.holeNumber}`, s.strokes]));
+  const sortedHoles = [...holes].sort((a, b) => a.holeNumber - b.holeNumber);
   const results: HoleResult[] = [];
   let totalStrokes = 0;
   let totalNet = 0;
@@ -56,29 +63,32 @@ export function summariseRound(
   let frontNine = 0;
   let backNine = 0;
 
-  for (const hole of [...holes].sort((a, b) => a.holeNumber - b.holeNumber)) {
-    const strokes = byHole.get(hole.holeNumber);
-    if (strokes == null || strokes <= 0) continue;
-    const received = strokesReceived(playingHcp, hole.strokeIndex);
-    const net = strokes - received;
-    const pts = stablefordPoints(hole.par, strokes, received);
-    results.push({
-      holeNumber: hole.holeNumber,
-      par: hole.par,
-      strokeIndex: hole.strokeIndex,
-      strokes,
-      shotsReceived: received,
-      net,
-      points: pts,
-      toPar: strokes - hole.par,
-    });
-    totalStrokes += strokes;
-    totalNet += net;
-    points += pts;
-    toPar += strokes - hole.par;
-    netToPar += net - hole.par;
-    if (hole.holeNumber <= 9) frontNine += strokes;
-    else backNine += strokes;
+  for (let round = 1; round <= maxRound; round += 1) {
+    for (const hole of sortedHoles) {
+      const strokes = bySlot.get(`${round}:${hole.holeNumber}`);
+      if (strokes == null || strokes <= 0) continue;
+      const received = strokesReceived(playingHcp, hole.strokeIndex);
+      const net = strokes - received;
+      const pts = stablefordPoints(hole.par, strokes, received);
+      results.push({
+        holeNumber: hole.holeNumber,
+        par: hole.par,
+        strokeIndex: hole.strokeIndex,
+        strokes,
+        shotsReceived: received,
+        net,
+        points: pts,
+        toPar: strokes - hole.par,
+        ...(maxRound > 1 || round > 1 ? { round } : {}),
+      });
+      totalStrokes += strokes;
+      totalNet += net;
+      points += pts;
+      toPar += strokes - hole.par;
+      netToPar += net - hole.par;
+      if (hole.holeNumber <= 9) frontNine += strokes;
+      else backNine += strokes;
+    }
   }
 
   return {
@@ -133,13 +143,27 @@ export function countback(
   format: "STABLEFORD" | "STROKE_PLAY",
   holesInCard: number,
 ): number[] {
-  const byHole = new Map(row.holeResults.map((h) => [h.holeNumber, h]));
+  // Walk the combined card backwards by slot: for a single round a slot is a
+  // hole (identical to looking the hole up by number), for a two-day event the
+  // last slots are the final round - countback off the end of the last day,
+  // which is how a medal is actually settled.
+  const bySlot = new Map<string, (typeof row.holeResults)[number]>();
+  let maxRound = 1;
+  for (const result of row.holeResults) {
+    const round = result.round ?? 1;
+    maxRound = Math.max(maxRound, round);
+    bySlot.set(`${round}:${result.holeNumber}`, result);
+  }
+  const perRound = Math.max(1, Math.round(holesInCard / maxRound));
   const segments = holesInCard >= 18 ? [9, 6, 3, 1] : [Math.ceil(holesInCard / 2), 3, 1];
   return segments.map((n) => {
     let points = 0;
     let gross = 0;
-    for (let hole = holesInCard - n + 1; hole <= holesInCard; hole += 1) {
-      const result = byHole.get(hole);
+    for (let i = 0; i < n; i += 1) {
+      const slot = holesInCard - i;
+      const round = Math.ceil(slot / perRound);
+      const hole = ((slot - 1) % perRound) + 1;
+      const result = bySlot.get(`${round}:${hole}`);
       points += result?.points ?? 0;
       gross += result?.strokes ?? 0;
     }

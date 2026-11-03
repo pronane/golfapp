@@ -18,7 +18,14 @@ import { ApiError } from "./http";
 import { saveCourse } from "./courses";
 import { deleteScrambleScoresForGroup } from "./scrambleScores";
 import { DEFAULT_SETTINGS, getGameSettings, saveGameSettings } from "./games";
-import { effectiveAllowance, gamesPreset, hasGamesPreset, isGrossFormat, type EventFormat } from "./eventFormats";
+import {
+  effectiveAllowance,
+  gamesPreset,
+  hasGamesPreset,
+  isGrossFormat,
+  supportsRounds,
+  type EventFormat,
+} from "./eventFormats";
 import { fetchCourse } from "./courseApi";
 import { courseHandicap, DEFAULT_TEE, parseTees, playingHandicap as calcPlayingHandicap, type Tee } from "./handicap";
 import { newId, newJoinCode, newToken, uniqueSlug } from "./ids";
@@ -137,6 +144,8 @@ export type CreateEventInput = {
   startTime?: string;
   courseId?: string | null;
   format?: EventFormat;
+  /** How many times the card is played; only formats with individual cards. */
+  rounds?: number;
   handicapAllowance?: number;
   maxPlayers?: number;
   status?: EventStatus;
@@ -267,6 +276,7 @@ export async function createEvent(input: CreateEventInput) {
     courseId,
     courseName,
     format: input.format ?? "STABLEFORD",
+    rounds: supportsRounds(input.format ?? "STABLEFORD") ? Math.min(4, Math.max(1, input.rounds ?? 1)) : 1,
     handicapAllowance: isGrossFormat(input.format ?? "STABLEFORD") ? 0 : input.handicapAllowance ?? 95,
     status: input.status ?? "DRAFT",
     maxPlayers: input.maxPlayers ?? 72,

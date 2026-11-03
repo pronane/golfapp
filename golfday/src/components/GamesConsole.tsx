@@ -9,6 +9,8 @@ type PairRow = { id: string; name: string; playerA: string; playerB: string };
 
 type Props = {
   eventId: string;
+  /** The event's format - foursomes and greensomes need the pairs board too. */
+  format?: string;
   holeCount: number;
   players: Player[];
 };
@@ -32,7 +34,7 @@ const EMPTY: GameSettings = {
  * team formats (4BBB pairs or Ryder Cup-style match play), sponsors and the
  * entry fee. Everything saves through PUT /api/events/:id/games.
  */
-export function GamesConsole({ eventId, holeCount, players }: Props) {
+export function GamesConsole({ eventId, holeCount, players, format }: Props) {
   const router = useRouter();
   const [settings, setSettings] = useState<GameSettings>(EMPTY);
   const [pairs, setPairs] = useState<PairRow[]>([]);
@@ -190,9 +192,13 @@ export function GamesConsole({ eventId, holeCount, players }: Props) {
           ))}
         </div>
 
-        {settings.teamFormat === "FOURBBB" && (
+        {(settings.teamFormat === "FOURBBB" || format === "FOURSOMES" || format === "GREENSOMES") && (
           <div className="space-y-2">
-            <p className="text-[12.5px] text-ink/60">Each hole counts the better of the two partners&apos; Stableford points.</p>
+            <p className="text-[12.5px] text-ink/60">
+              {format === "FOURSOMES" || format === "GREENSOMES"
+                ? "Each pair plays one card - draw the pairs from the tee groups, and the pair's scorecard link opens from the four-ball's normal scoring link."
+                : "Each hole counts the better of the two partners' Stableford points."}
+            </p>
             <div className="flex flex-wrap gap-2">
               <button className="btn-secondary btn-sm" disabled={busy}
                 onClick={async () => {

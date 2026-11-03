@@ -103,6 +103,8 @@ export const events = sqliteTable("events", {
   courseId: text("course_id"),
   courseName: text("course_name"), // snapshot in case a course is deleted
   format: text("format").notNull().default("STABLEFORD"), // see src/lib/eventFormats.ts for the full catalogue
+  /** How many times the card is played: 1 = a normal day, 2 = a two-day event. */
+  rounds: integer("rounds").notNull().default(1),
   handicapAllowance: integer("handicap_allowance").notNull().default(95),
   status: text("status").notNull().default("DRAFT"), // DRAFT | OPEN | IN_PROGRESS | COMPLETED | CANCELLED
   maxPlayers: integer("max_players").notNull().default(72),
@@ -179,11 +181,14 @@ export const scores = sqliteTable("scores", {
   holeNumber: integer("hole_number").notNull(),
   strokes: integer("strokes").notNull(),
   points: integer("points").notNull().default(0),
+  /** Which round of a multi-round event this stroke belongs to (1 = single). */
+  round: integer("round").notNull().default(1),
   recordedBy: text("recorded_by"),
   createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
   updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
 }, (t) => ({
-  scoreUnique: uniqueIndex("score_unique").on(t.eventId, t.playerId, t.holeNumber),
+  // Round is part of the key: a two-day event plays hole 1 twice.
+  scoreUnique: uniqueIndex("score_round_unique").on(t.eventId, t.playerId, t.holeNumber, t.round),
 }));
 
 /** Every score edit is audited - handy when a card is disputed. */
@@ -192,6 +197,8 @@ export const scoreAudit = sqliteTable("score_audit", {
   eventId: text("event_id").notNull(),
   playerId: text("player_id").notNull(),
   holeNumber: integer("hole_number").notNull(),
+  /** Which round of a multi-round event was corrected (1 = single round). */
+  round: integer("round").notNull().default(1),
   oldStrokes: integer("old_strokes"),
   newStrokes: integer("new_strokes").notNull(),
   changedBy: text("changed_by"),
@@ -271,6 +278,8 @@ export const eventPairs = sqliteTable("event_pairs", {
   playerA: text("player_a").notNull(),
   playerB: text("player_b").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+  /** Opens the pair's scorecard (foursomes / greensomes); null when unused. */
+  token: text("token"),
 }, (t) => ({
   eventIdx: index("event_pairs_event_idx").on(t.eventId),
 }));
@@ -324,6 +333,37 @@ export const scrambleScores = sqliteTable("scramble_scores", {
 }, (t) => ({
   scoreUnique: uniqueIndex("scramble_score_unique").on(t.eventId, t.groupId, t.holeNumber),
   groupIdx: index("scramble_score_group_idx").on(t.eventId, t.groupId),
+}));
+
+/**
+ * Foursomes / greensomes: one card per pair (the team), not per player -
+ * the same shape as scramble_scores, but with no drive to record (alternate
+ * shot) and its own token to open it.
+ */
+export const pairScores = sqliteTable("pair_scores", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  pairId: text("pair_id").notNull(),
+  holeNumber: integer("hole_number").notNull(),
+  strokes: integer("strokes").notNull(),
+  recordedBy: text("recorded_by"),
+  updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  scoreUnique: uniqueIndex("pair_score_unique").on(t.eventId, t.pairId, t.holeNumber),
+  pairIdx: index("pair_score_pair_idx").on(t.eventId, t.pairId),
+}));
+
+export const pairAudit = sqliteTable("pair_audit", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  pairId: text("pair_id").notNull(),
+  holeNumber: integer("hole_number").notNull(),
+  oldStrokes: integer("old_strokes"),
+  newStrokes: integer("new_strokes").notNull(),
+  changedBy: text("changed_by"),
+  changedAt: text("changed_at").notNull().default(sql`(current_timestamp)`),
+}, (t) => ({
+  auditIdx: index("pair_audit_event_idx").on(t.eventId),
 }));
 
 export const scrambleAudit = sqliteTable("scramble_audit", {

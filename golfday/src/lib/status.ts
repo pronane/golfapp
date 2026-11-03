@@ -46,7 +46,5 @@ export function scoreWriteRule(status: string, isAdmin: boolean): ScoreWriteRule
  *  surface that names a format already imports from this module. */
 export { formatLabel } from "./eventFormats";
 
-/** Whether the format is scored as one card per team. */
-export function isTeamFormat(format: string): boolean {
-  return format === "TEXAS_SCRAMBLE";
-}
+/** Whether the format is scored as one card per team (or a derived team). */
+export { isTeamFormat } from "./eventFormats";

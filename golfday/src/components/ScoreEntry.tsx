@@ -22,6 +22,7 @@ const SCORE_WORDS: Record<number, string> = { 1: "Hole in one", 2: "Eagle", 3: "
 
 export function ScoreEntry({ initial, initialBoard }: Props) {
   const [card, setCard] = useState(initial);
+  const [round, setRound] = useState(initial.round ?? 1);
   const [activePlayerId, setActivePlayerId] = useState(initial.players[0]?.id ?? "");
   const [activeHole, setActiveHole] = useState(() => {
     const first = initial.players[0];
@@ -38,7 +39,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
   const token = initial.group.token;
 
   const refreshCard = useCallback(async () => {
-    const res = await fetch(`/api/groups/${token}`, { cache: "no-store" });
+    const res = await fetch(`/api/groups/${token}?round=${round}`, { cache: "no-store" });
     if (!res.ok) return;
     const fresh = (await res.json()) as GroupScoreboard;
     // Keep any scores still waiting to sync visible on top of the server's card.
@@ -53,7 +54,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
         return { ...p, scores };
       }),
     });
-  }, [token]);
+  }, [token, round]);
 
   const sync = useCallback(async () => {
     if (readQueue(token).length === 0) {
@@ -89,8 +90,9 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
   const received = hole && activePlayer ? strokesReceived(activePlayer.playingHandicap, hole.strokeIndex) : 0;
   const existing = activePlayer?.scores[activeHole];
 
+  // `thru` aggregates every round, so the denominator does too.
   const scored = useMemo(() => card.players.reduce((sum, p) => sum + p.thru, 0), [card]);
-  const totalHoles = card.players.length * card.holes.length;
+  const totalHoles = card.players.length * card.holes.length * (card.event.rounds ?? 1);
 
   async function save(playerId: string, holeNumber: number, strokes: number) {
     setSaving(holeNumber);
@@ -103,7 +105,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
         p.id === playerId ? { ...p, scores: { ...p.scores, [holeNumber]: strokes } } : p,
       ),
     }));
-    const payload = { eventId: card.event.id, playerId, holeNumber, strokes, token: card.group.token };
+    const payload = { eventId: card.event.id, playerId, holeNumber, strokes, token: card.group.token, round };
     let res: Response;
     try {
       res = await fetch("/api/scores", {
@@ -218,6 +220,26 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
             </div>
           </div>
         </div>
+
+        {/* round switcher (a two-day event plays the card twice) */}
+        {(card.event.rounds ?? 1) > 1 && (
+          <div className="flex gap-2 border-t border-ink/[0.06] px-4 py-2">
+            {Array.from({ length: card.event.rounds ?? 1 }, (_, i) => i + 1).map((r) => (
+              <button
+                key={r}
+                onClick={() => {
+                  setRound(r);
+                  const first = initial.players[0];
+                  const missing = initial.holes.find((h) => !first?.scores[h.holeNumber]);
+                  setActiveHole(missing?.holeNumber ?? 1);
+                }}
+                className={`pill ${r === round ? "bg-fairway-300 text-fairway-950 ring-fairway-400" : "bg-ink/[0.04] text-ink/65 ring-ink/10 hover:bg-ink/[0.08]"}`}
+              >
+                Round {r}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* player chips */}
         <div className="flex gap-2 overflow-x-auto px-4 py-2">

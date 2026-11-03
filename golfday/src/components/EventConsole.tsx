@@ -263,6 +263,10 @@ export function EventConsole(props: Props) {
                   </optgroup>
                   <optgroup label="Team and games">
                     <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
+                    <option value="FOURSOMES">Foursomes (alternate shot)</option>
+                    <option value="GREENSOMES">Greensomes (best drive)</option>
+                    <option value="SHAMBLE">Shamble (best net a hole)</option>
+                    <option value="BEST_2_OF_4">Best two of four</option>
                     <option value="FOUR_BETTER_BALL">Better-ball pairs (4BBB)</option>
                     <option value="RYDER_CUP">Ryder Cup (team match play)</option>
                     <option value="SKINS_NET">Skins (net)</option>
@@ -841,6 +845,7 @@ export function EventConsole(props: Props) {
       {tab === "games" && (
         <GamesConsole
           eventId={props.event.id}
+          format={props.event.format}
           holeCount={holes.length || 18}
           players={props.registrations
             .filter((r) => r.registration.status === "REGISTERED")

@@ -72,13 +72,16 @@ pretended otherwise.
 
 ## The end-to-end check
 
-There are three runs. `npm run e2e` is the club/organiser journey; `npm run e2e:formats`
-walks every event type (Stableford, stroke play, Texas scramble) with a full 19-player
-field, all 18 holes, the side games and the completed-event lock, driving the HTTP API so
-it needs no browser; `npm run e2e:friends` is
+There are four runs. `npm run e2e` is the club/organiser journey; `npm run e2e:formats`
+walks every format in the catalogue plus a two-day medal - Stableford and stroke play
+(net and gross), Texas scramble, foursomes, greensomes, shamble, best-two-of-four,
+4BBB, Ryder Cup and skins - with a full 19-player field, all 18 holes (each round, for
+the two-day event), the side games and the completed-event lock, driving the HTTP API so
+it needs no browser; `npm run e2e:seasons` runs a season's fixtures across formats and
+checks the running totals and the winner; `npm run e2e:friends` is
 the same harness on the case where one person sets up a day for three mates - no society,
 no roster, a course typed in by hand and an entry fee taken in cash. The installer runs
-both.
+both of the browser-free journeys it can.
 
 `npm run e2e` starts the app on port 3210 (override with `E2E_PORT`), creates a throwaway
 database (`data/e2e-run.db`, deleted afterwards), and then, in a real browser:

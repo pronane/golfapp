@@ -5,7 +5,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { eventPairs, eventSettings, sideGameEntries } from "@/db/schema";
-import { newId } from "./ids";
+import { newId, newToken } from "./ids";
 import { cleanFlightCount } from "./flights";
 import type { Standing } from "./scoring";
 import {
@@ -208,6 +208,9 @@ export async function replacePairs(
       playerA: p.playerIds[0],
       playerB: p.playerIds[1],
       sortOrder: i,
+      // A pair's own scoring link (foursomes / greensomes): the pair card can
+      // be opened without the four-ball's group link.
+      token: newToken(),
     })),
   );
 }

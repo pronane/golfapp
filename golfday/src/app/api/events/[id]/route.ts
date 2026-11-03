@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { eventHoles, events, seasonEvents, societyEvents } from "@/db/schema";
+import { eventHoles, events, scores as scoresTable, seasonEvents, societyEvents } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { ApiError, getEventAccess, json, parseJson, requireEventAccess, requireUser, route } from "@/lib/http";
 import { bumpRevision, getCourseWithHoles, getEventBundle, recalculateHandicaps } from "@/lib/events";
@@ -9,7 +9,7 @@ import { updateEventSchema, validate } from "@/lib/validate";
 import { deleteEventGames } from "@/lib/games";
 import { deleteScrambleScoresForEvent } from "@/lib/scrambleScores";
 import { deleteEventPayments } from "@/lib/payments";
-import { gamesPreset, isGrossFormat } from "@/lib/eventFormats";
+import { gamesPreset, isGrossFormat, supportsRounds } from "@/lib/eventFormats";
 import { getGameSettings, saveGameSettings } from "@/lib/games";
 
 export const dynamic = "force-dynamic";
@@ -50,8 +50,30 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
   const body = validate(updateEventSchema, await parseJson(request));
 
   const updates: Record<string, unknown> = {};
-  for (const key of ["name", "description", "date", "startTime", "format", "handicapAllowance", "maxPlayers", "status", "isPublic", "allowCourseClash"] as const) {
+  for (const key of ["name", "description", "date", "startTime", "format", "rounds", "handicapAllowance", "maxPlayers", "status", "isPublic", "allowCourseClash"] as const) {
     if (body[key] !== undefined) updates[key] = body[key];
+  }
+  // Rounds are part of the score key (score_round_unique): they cannot change
+  // once a card exists, and a one-card-per-team format has no second round.
+  if (updates.rounds !== undefined || updates.format !== undefined) {
+    const finalFormat = String(updates.format ?? access.event.format);
+    const storedRounds = access.event.rounds ?? 1;
+    const wanted = updates.rounds !== undefined ? Number(updates.rounds) : supportsRounds(finalFormat) ? (updates.format !== undefined && updates.format !== access.event.format ? 1 : storedRounds) : 1;
+    if (!supportsRounds(finalFormat) && wanted > 1) {
+      throw new ApiError(400, `${finalFormat} is a single-round format`, "bad_rounds");
+    }
+    const changing = wanted !== storedRounds || (updates.format !== undefined && updates.format !== access.event.format && !supportsRounds(finalFormat) && storedRounds > 1);
+    if (changing) {
+      const [{ n }] = (
+        await db.select({ n: sql<number>`count(*)` }).from(scoresTable).where(eq(scoresTable.eventId, id))
+      );
+      if (Number(n) > 0) {
+        throw new ApiError(400, "Scores are already in - the rounds cannot change now", "scores_exist");
+      }
+      updates.rounds = wanted;
+    } else if (!supportsRounds(finalFormat)) {
+      updates.rounds = 1;
+    }
   }
   // The format decides the allowance for gross days, not the other way round.
   const finalFormat = (updates.format as string | undefined) ?? access.event.format;

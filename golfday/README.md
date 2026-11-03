@@ -81,10 +81,11 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # 158 unit tests
+npm test           # 216 unit tests
 npm run e2e        # the browser click-through (own database, own server)
 npm run e2e:friends # the friends' day: no society, hand-typed course, cash entry
-npm run e2e:formats # every event type, 19 players, all 18 holes, 3,190 checks, no browser needed
+npm run e2e:formats # all 14 walks (every format + a two-day medal), 19 players, 18,103 checks, no browser
+npm run e2e:seasons # a season's running totals across formats, then the winner: 985 checks
 npm run e2e:upgrade # boot the built app against a database older than the build
 npm run setup      # env + schema + launchers + checks, no browser run
 ```
@@ -185,11 +186,25 @@ MP4 and the full script for all three. Static screenshots of every screen are in
 
 * **Every format in one list** - the wizard and the console both offer the full
   catalogue (`src/lib/eventFormats.ts`): Stableford and stroke play in net **and gross**,
-  Texas scramble, better-ball pairs (4BBB), Ryder Cup team match play, and skins (net or
-  gross). Picking a team or skins format switches the matching Games-tab board on at
-  creation; gross formats pin the handicap allowance to zero, always. Not built yet (and
-  not claimed anywhere): foursomes, greensomes, shamble, best-two-of-four and multi-round
-  events - those need their own scoring passes.
+  Texas scramble, **foursomes** and **greensomes**, **shamble** and **best two of four**,
+  better-ball pairs (4BBB), Ryder Cup team match play, and skins (net or gross) - thirteen
+  formats, plus a **rounds** option (1-4) for multi-round days. Picking a team or skins
+  format switches the matching Games-tab board on at creation; gross formats pin the
+  handicap allowance to zero, always.
+* **Foursomes and greensomes** - one card per pair instead of per player. Pairs are drawn
+  from the tee groups (the console's *Pair from tee groups* button), the pair's card opens
+  from the four-ball's normal scoring link, and the team handicap is half the sum of the
+  partners' playing handicaps taken on the stroke-index holes. Pair cards keep their own
+  audit trail, and the master scorecard amends them like any other card.
+* **Shamble and best two of four** - everybody cards their own ball through the normal
+  scorecard, and the team board is computed from those cards: best net a hole for a
+  shamble, the sum of the two best nets for a best-two. A hole only settles once every
+  member of the team has scored it, so a half-played card can never decide a team result.
+* **Two-day (and three- and four-round) events** - set *Rounds* on a format with
+  individual cards; every round is carded separately (the scorepad gets a round switcher)
+  and aggregates into one leaderboard, with countback walking back from the end of the
+  last round. A one-card-per-team format (scramble, foursomes, greensomes) is
+  single-round by construction, and the API refuses to pretend otherwise.
 * **Texas scramble** - a team card instead of four individual ones. Set the format when
   you create the day; each tee group is a team, a hole takes one gross score, and the
   team handicap is the England Golf scramble allowance (25/20/15/10 of the players'
@@ -232,7 +247,11 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   the table builds itself from the live boards. Positions score 100-90-80-75… down the
   field (or sum Stableford points instead), ties share the position, and a **best-N**
   rule can count only a player's best results while still showing everything played.
-  Texas scramble fixtures count too: each team member earns the team's result.
+  Every team format counts too - scramble, foursomes, greensomes, shamble and
+  best-two - each member of a team earns the team's result. A fixture dated outside
+  the season's window is listed but cannot score, and once `endsOn` has passed the
+  noticeboard calls the top of the table the **Season winner**, not the leader.
+  `npm run e2e:seasons` proves the running totals across three formats (985 checks).
 
 ### Games, money and the clubhouse screen
 

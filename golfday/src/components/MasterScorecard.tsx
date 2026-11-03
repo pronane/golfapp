@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { teamBoardKind } from "@/lib/eventFormats";
 
 type Hole = { holeNumber: number; par: number; strokeIndex: number };
 type Card = {
@@ -8,6 +9,12 @@ type Card = {
   name: string;
   group: string | null;
   playingHandicap: number;
+  scores: { holeNumber: number; strokes: number; round?: number }[];
+};
+type PairCardRow = {
+  pairId: string;
+  name: string;
+  members: { playerId: string; name: string }[];
   scores: { holeNumber: number; strokes: number }[];
 };
 type Team = {
@@ -17,7 +24,7 @@ type Team = {
   members: { playerId: string; name: string }[];
   scores: { holeNumber: number; strokes: number; drivePlayerId: string | null }[];
 };
-type CardsResponse = { format: string; holes: Hole[]; cards: Card[]; teams: Team[] };
+type CardsResponse = { format: string; rounds?: number; holes: Hole[]; cards: Card[]; teams: Team[]; pairCards?: PairCardRow[] };
 type Amendment = {
   id: string;
   playerName: string | null;
@@ -38,6 +45,7 @@ type Amendment = {
  */
 export function MasterScorecard({ eventId, scramble }: { eventId: string; scramble: boolean }) {
   const [data, setData] = useState<CardsResponse | null>(null);
+  const [round, setRound] = useState(1);
   const [amendments, setAmendments] = useState<Amendment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +68,14 @@ export function MasterScorecard({ eventId, scramble }: { eventId: string; scramb
     void load();
   }, [load]);
 
-  async function setScore(input: { playerId?: string; groupId?: string; holeNumber: number; strokes: number | null }) {
+  async function setScore(input: {
+    playerId?: string;
+    groupId?: string;
+    pairId?: string;
+    holeNumber: number;
+    strokes: number | null;
+    round?: number;
+  }) {
     setBusy(true);
     setError(null);
     try {
@@ -68,10 +83,13 @@ export function MasterScorecard({ eventId, scramble }: { eventId: string; scramb
         setError("Clear a hole from the player's own scorecard for now - this grid only amends numbers.");
         return;
       }
-      const url = scramble ? "/api/scramble" : "/api/scores";
+      const pairMode = data ? teamBoardKind(data.format) === "PAIR" : false;
+      const url = scramble ? "/api/scramble" : pairMode ? "/api/pair-scores" : "/api/scores";
       const body = scramble
         ? { eventId, groupId: input.groupId, holeNumber: input.holeNumber, strokes: input.strokes }
-        : { eventId, playerId: input.playerId, holeNumber: input.holeNumber, strokes: input.strokes };
+        : pairMode
+          ? { eventId, pairId: input.pairId, holeNumber: input.holeNumber, strokes: input.strokes }
+          : { eventId, playerId: input.playerId, holeNumber: input.holeNumber, strokes: input.strokes, round: input.round ?? round };
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -79,7 +97,7 @@ export function MasterScorecard({ eventId, scramble }: { eventId: string; scramb
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error ?? "Could not save that score");
-      setSaved(`${scramble ? "Team" : "Card"} hole ${input.holeNumber} set to ${input.strokes}`);
+      setSaved(`${scramble ? "Team" : pairMode ? "Pair" : "Card"} hole ${input.holeNumber} set to ${input.strokes}`);
       window.setTimeout(() => setSaved(null), 2200);
       await load();
     } catch (err) {
@@ -98,6 +116,8 @@ export function MasterScorecard({ eventId, scramble }: { eventId: string; scramb
   type Cell = { holeNumber: number; strokes: number | undefined; onSave: (value: number) => void };
   type Row = { key: string; label: string; sub: string; cells: Cell[] };
 
+  const pairMode = teamBoardKind(data.format) === "PAIR";
+  const rounds = data.rounds ?? 1;
   const rows: Row[] = scramble
     ? data.teams.map((team) => {
         const byHole = new Map(team.scores.map((row) => [row.holeNumber, row.strokes]));
@@ -112,19 +132,36 @@ export function MasterScorecard({ eventId, scramble }: { eventId: string; scramb
           })),
         };
       })
-    : data.cards.map((card) => {
-        const byHole = new Map(card.scores.map((row) => [row.holeNumber, row.strokes]));
-        return {
-          key: card.playerId,
-          label: card.name,
-          sub: `${card.group ?? "ungrouped"} · PH ${card.playingHandicap}`,
-          cells: data.holes.map((hole) => ({
-            holeNumber: hole.holeNumber,
-            strokes: byHole.get(hole.holeNumber),
-            onSave: (value: number) => void setScore({ playerId: card.playerId, holeNumber: hole.holeNumber, strokes: value }),
-          })),
-        };
-      });
+    : pairMode
+      ? (data.pairCards ?? []).map((pair) => {
+          const byHole = new Map(pair.scores.map((row) => [row.holeNumber, row.strokes]));
+          return {
+            key: pair.pairId,
+            label: pair.name,
+            sub: pair.members.map((m) => m.name.split(" ")[0]).join(" & "),
+            cells: data.holes.map((hole) => ({
+              holeNumber: hole.holeNumber,
+              strokes: byHole.get(hole.holeNumber),
+              onSave: (value: number) => void setScore({ pairId: pair.pairId, holeNumber: hole.holeNumber, strokes: value }),
+            })),
+          };
+        })
+      : data.cards.map((card) => {
+          // One round at a time: a two-day event plays the same holes twice.
+          const byHole = new Map(
+            card.scores.filter((row) => (row.round ?? 1) === round).map((row) => [row.holeNumber, row.strokes]),
+          );
+          return {
+            key: card.playerId,
+            label: card.name,
+            sub: `${card.group ?? "ungrouped"} · PH ${card.playingHandicap}`,
+            cells: data.holes.map((hole) => ({
+              holeNumber: hole.holeNumber,
+              strokes: byHole.get(hole.holeNumber),
+              onSave: (value: number) => void setScore({ playerId: card.playerId, holeNumber: hole.holeNumber, strokes: value, round }),
+            })),
+          };
+        });
 
   return (
     <div className="space-y-4">
@@ -137,7 +174,24 @@ export function MasterScorecard({ eventId, scramble }: { eventId: string; scramb
               and is recorded below.
             </p>
           </div>
-          <span className="text-[11.5px] text-ink/40">{data.holes.length} holes · {rows.length} {scramble ? "teams" : "cards"}</span>
+          <div className="flex items-center gap-3">
+            {(data.rounds ?? 1) > 1 && !scramble && teamBoardKind(data.format) !== "PAIR" && (
+              <label className="flex items-center gap-1.5 text-[12px] font-medium text-ink/60">
+                Round
+                <select className="select w-auto py-1" value={round} onChange={(e) => setRound(Number(e.target.value))}>
+                  {Array.from({ length: data.rounds ?? 1 }, (_, i) => i + 1).map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <span className="text-[11.5px] text-ink/40">
+              {data.holes.length} holes · {rows.length}{" "}
+              {scramble ? "teams" : teamBoardKind(data.format) === "PAIR" ? "pairs" : "cards"}
+            </span>
+          </div>
         </div>
         {(error || saved) && (
           <p
@@ -153,7 +207,9 @@ export function MasterScorecard({ eventId, scramble }: { eventId: string; scramb
           <table className="border-separate border-spacing-y-1 text-[12px]">
             <thead>
               <tr className="text-ink/45">
-                <th className="sticky left-0 z-10 bg-white px-2 text-left font-semibold">{scramble ? "Team" : "Player"}</th>
+                <th className="sticky left-0 z-10 bg-white px-2 text-left font-semibold">
+                  {scramble ? "Team" : teamBoardKind(data.format) === "PAIR" ? "Pair" : "Player"}
+                </th>
                 {data.holes.map((hole) => (
                   <th key={hole.holeNumber} className="w-9 px-0.5 text-center font-semibold" title={`Par ${hole.par} · SI ${hole.strokeIndex}`}>
                     {hole.holeNumber}

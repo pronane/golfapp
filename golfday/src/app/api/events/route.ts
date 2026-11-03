@@ -56,6 +56,7 @@ export const POST = route(async (request: Request) => {
     startTime: body.startTime,
     courseId: body.courseId ?? null,
     format: body.format,
+    rounds: body.rounds,
     handicapAllowance: body.handicapAllowance,
     maxPlayers: body.maxPlayers,
     status: body.status,

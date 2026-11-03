@@ -8,7 +8,7 @@ import { GamesPanels, SponsorStrip } from "./GamesPanels";
 import { ShareButton } from "./ShareButton";
 import { LiveDot, Trophy } from "./Icons";
 import { useLiveBoard } from "./useLiveBoard";
-import { isStablefordBoard } from "@/lib/eventFormats";
+import { formatLabel, isStablefordBoard } from "@/lib/eventFormats";
 
 function relative(date: Date | null) {
   if (!date) return "waiting";
@@ -30,7 +30,9 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
     return () => clearInterval(timer);
   }, []);
 
-  const scramble = data.event.format === "TEXAS_SCRAMBLE";
+  // Every team format - scramble, foursomes, greensomes, shamble, best-two -
+  // returns `teams`; an individual day returns null.
+  const scramble = data.teams !== null;
   const teams = data.teams ?? [];
   const isStableford = isStablefordBoard(data.event.format) || scramble;
   const started = scramble ? teams.some((t) => t.thru > 0) : data.standings.some((s) => s.thru > 0);
@@ -98,7 +100,7 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <HeaderStat label={scramble ? "Teams" : "Players"} value={scramble ? String(teams.length) : String(data.stats.registered)} />
             <HeaderStat label="Holes scored" value={`${data.stats.scoresEntered}`} />
-            <HeaderStat label="Format" value={scramble ? "Texas scramble" : isStableford ? "Stableford" : "Net stroke"} />
+            <HeaderStat label="Format" value={formatLabel(data.event.format)} />
             <HeaderStat label="Allowance" value={`${data.event.handicapAllowance}%`} />
           </div>
         </div>
@@ -374,7 +376,7 @@ function HeaderStat({ label, value }: { label: string; value: string }) {
 function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: string[]; live: boolean }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [clock, setClock] = useState("");
-  const scramble = data.event.format === "TEXAS_SCRAMBLE";
+  const scramble = data.teams !== null;
   const isStableford = isStablefordBoard(data.event.format) || scramble;
   const rows = scramble
     ? (data.teams ?? []).map((t) => ({
@@ -435,7 +437,7 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
         <div className="text-right">
           <div className="font-mono text-4xl font-extrabold text-fairway-900">{clock}</div>
           <div className="text-[15px] text-fairway-800/70">
-            {data.event.courseName ?? ""} · {scramble ? "Texas scramble" : isStableford ? "Stableford" : "Net stroke play"}
+            {data.event.courseName ?? ""} · {formatLabel(data.event.format)}
           </div>
         </div>
       </header>

@@ -3,7 +3,15 @@
  * phone and sent when the connection comes back. One entry per player/hole -
  * the latest tap wins - stored per scoring link in localStorage.
  */
-export type QueuedScore = { eventId: string; playerId: string; holeNumber: number; strokes: number; token: string };
+export type QueuedScore = {
+  eventId: string;
+  playerId: string;
+  holeNumber: number;
+  strokes: number;
+  token: string;
+  /** Which round of a multi-round event (absent = round 1). */
+  round?: number;
+};
 
 const key = (token: string) => `golfday:queue:${token}`;
 
@@ -28,15 +36,22 @@ function writeQueue(token: string, queue: QueuedScore[]) {
 
 export function enqueue(item: QueuedScore) {
   const queue = readQueue(item.token).filter(
-    (q) => !(q.playerId === item.playerId && q.holeNumber === item.holeNumber),
+    (q) =>
+      !(
+        q.playerId === item.playerId &&
+        q.holeNumber === item.holeNumber &&
+        (q.round ?? 1) === (item.round ?? 1)
+      ),
   );
   writeQueue(item.token, [...queue, item]);
 }
 
-export function dropFromQueue(token: string, playerId: string, holeNumber: number) {
+export function dropFromQueue(token: string, playerId: string, holeNumber: number, round = 1) {
   writeQueue(
     token,
-    readQueue(token).filter((q) => !(q.playerId === playerId && q.holeNumber === holeNumber)),
+    readQueue(token).filter(
+      (q) => !(q.playerId === playerId && q.holeNumber === holeNumber && (q.round ?? 1) === round),
+    ),
   );
 }
 

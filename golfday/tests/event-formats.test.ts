@@ -30,13 +30,17 @@ import { formatLabel as statusFormatLabel } from "@/lib/status";
 import { createEventSchema, updateEventSchema } from "@/lib/validate";
 
 describe("the catalogue", () => {
-  it("is the nine formats the dropdown offers", () => {
+  it("is the thirteen formats the dropdown offers", () => {
     expect([...EVENT_FORMATS]).toEqual([
       "STABLEFORD",
       "STROKE_PLAY",
       "GROSS_STABLEFORD",
       "GROSS_STROKE_PLAY",
       "TEXAS_SCRAMBLE",
+      "FOURSOMES",
+      "GREENSOMES",
+      "SHAMBLE",
+      "BEST_2_OF_4",
       "FOUR_BETTER_BALL",
       "RYDER_CUP",
       "SKINS_NET",
@@ -65,7 +69,7 @@ describe("the catalogue", () => {
       expect(updateEventSchema.safeParse({ format }).success).toBe(true);
     }
     expect(createEventSchema.safeParse({ name: "Test day", date: "2026-06-06", format: "MATCH_PLAY" }).success).toBe(false);
-    expect(createEventSchema.safeParse({ name: "Test day", date: "2026-06-06", format: "FOURSOMES" }).success).toBe(false);
+    expect(createEventSchema.safeParse({ name: "Test day", date: "2026-06-06", format: "STABLEFORD_V2" }).success).toBe(false);
   });
 });
 
