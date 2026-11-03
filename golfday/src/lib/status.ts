@@ -42,25 +42,9 @@ export function scoreWriteRule(status: string, isAdmin: boolean): ScoreWriteRule
   return { allowed: true };
 }
 
-/**
- * The human name of an event's format, in one place.
- *
- * The fixture list used to print "Stroke play" for anything that was not
- * Stableford, so a Texas scramble was labelled as stroke play on the very page
- * strangers see first. Every surface that names a format should call this.
- */
-export function formatLabel(format: string): string {
-  switch (format) {
-    case "STABLEFORD":
-      return "Stableford";
-    case "STROKE_PLAY":
-      return "Stroke play";
-    case "TEXAS_SCRAMBLE":
-      return "Texas scramble";
-    default:
-      return format;
-  }
-}
+/** Format names live with the format catalogue; re-exported here because every
+ *  surface that names a format already imports from this module. */
+export { formatLabel } from "./eventFormats";
 
 /** Whether the format is scored as one card per team. */
 export function isTeamFormat(format: string): boolean {

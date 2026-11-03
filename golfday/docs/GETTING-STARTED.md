@@ -136,9 +136,12 @@ can add a season later and attach past results.
 **Admin → Create a golf day** is a three-step wizard:
 
 1. **The basics** - who the day is for (**Me and my friends**, the default, or one of the
-   societies you run), a name, the date, a one-line description, the format (Stableford,
-   net stroke play, or Texas scramble) and the handicap allowance (95% is common for
-   singles matchplay-style days, 100% for a straightforward Stableford).
+   societies you run), a name, the date and the format. The format list is the whole
+   toolbox: Stableford and stroke play (net or **gross**), Texas scramble, better-ball
+   pairs (4BBB), Ryder Cup team match play and skins (net or gross) - the team and
+   skins formats switch their own Games-tab board on when the day is created. The
+   handicap allowance follows the format: 95% is common for net days, 100% for a
+   straightforward Stableford, and gross formats play off zero shots.
 2. **The course** - search the course library by club or town and pick a card. It copies
    par, stroke index and the tee ratings, so playing handicaps are worked out properly.
    **If your course is not in the list** - a pitch and putt, a municipal, a nine-holer, a

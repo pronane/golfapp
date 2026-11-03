@@ -196,7 +196,7 @@ depend on Turso-only features.
 
 | Plan | Price | Who it is for | What is included |
 | --- | --- | --- | --- |
-| **Free** | £0 | A fourball, a one-off, a curious organiser | 1 golf day a month, up to 12 players, live board, group scorecards, WhatsApp share, QR cart signs, Stableford + stroke play + scramble |
+| **Free** | £0 | A fourball, a one-off, a curious organiser | 1 golf day a month, up to 12 players, live board, group scorecards, WhatsApp share, QR cart signs, every format |
 | **Day pass** | **£15 per golf day** | The annual outing, the stag do, the charity day | Up to 40 players, **email invitations**, flights, the **master scorecard** + audit trail, hide-the-board, sponsors, no GolfDay branding on the board |
 | **Society** | **£79/year** (or £8/month) | The regular society: 6–12 days a year | Everything in Day pass, 12 golf days a year, up to 40 players each, season order of merit, society roster |
 | **Club** | **£249/year** | A club or a big society running 20+ days | Unlimited golf days, up to 120 players, multiple organisers, sponsor logos on the clubhouse TV board, CSV exports, priority support |

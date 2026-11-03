@@ -12,6 +12,7 @@ import { ShareButton } from "./ShareButton";
 import { PaymentsPanel } from "./PaymentsPanel";
 import { STATUS_LABEL, STATUS_STYLE } from "@/lib/status";
 import { SELECTABLE_PROVENANCES, provenanceMeta } from "@/lib/handicapProvenance";
+import { isGrossFormat } from "@/lib/eventFormats";
 
 export type ConsoleEvent = {
   id: string;
@@ -242,15 +243,47 @@ export function EventConsole(props: Props) {
               </div>
               <div>
                 <label className="label" htmlFor="ev-format">Format</label>
-                <select id="ev-format" className="select" value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })}>
-                  <option value="STABLEFORD">Stableford</option>
-                  <option value="STROKE_PLAY">Net stroke play</option>
-                  <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
+                <select
+                  id="ev-format"
+                  className="select"
+                  value={form.format}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    const wasGross = isGrossFormat(form.format);
+                    const willBeGross = isGrossFormat(next);
+                    const handicapAllowance = willBeGross ? 0 : wasGross && form.handicapAllowance === 0 ? 95 : form.handicapAllowance;
+                    setForm({ ...form, format: next, handicapAllowance });
+                  }}
+                >
+                  <optgroup label="Individual">
+                    <option value="STABLEFORD">Stableford</option>
+                    <option value="STROKE_PLAY">Stroke play (net)</option>
+                    <option value="GROSS_STABLEFORD">Stableford (gross)</option>
+                    <option value="GROSS_STROKE_PLAY">Stroke play (gross)</option>
+                  </optgroup>
+                  <optgroup label="Team and games">
+                    <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
+                    <option value="FOUR_BETTER_BALL">Better-ball pairs (4BBB)</option>
+                    <option value="RYDER_CUP">Ryder Cup (team match play)</option>
+                    <option value="SKINS_NET">Skins (net)</option>
+                    <option value="SKINS_GROSS">Skins (gross)</option>
+                  </optgroup>
                 </select>
               </div>
               <div>
-                <label className="label" htmlFor="ev-allowance">Allowance %</label>
-                <input id="ev-allowance" type="number" min={0} max={100} className="input" value={form.handicapAllowance} onChange={(e) => setForm({ ...form, handicapAllowance: Number(e.target.value) })} />
+                <label className="label" htmlFor="ev-allowance">
+                  {isGrossFormat(form.format) ? "Allowance % (gross - none given)" : "Allowance %"}
+                </label>
+                <input
+                  id="ev-allowance"
+                  type="number"
+                  min={0}
+                  max={100}
+                  className="input"
+                  value={form.handicapAllowance}
+                  disabled={isGrossFormat(form.format)}
+                  onChange={(e) => setForm({ ...form, handicapAllowance: Number(e.target.value) })}
+                />
               </div>
             </div>
             <label className="flex items-center gap-2 text-[13px] font-medium">
@@ -262,6 +295,8 @@ export function EventConsole(props: Props) {
                 className="btn-primary btn-sm"
                 disabled={busy}
                 onClick={async () => {
+                  // A format change carries its Games preset with it
+                  // (server-side, in the PATCH) - pairs, match board or pot.
                   const result = await call(`/api/events/${props.event.id}`, "PATCH", {
                     ...form,
                     description: form.description || null,

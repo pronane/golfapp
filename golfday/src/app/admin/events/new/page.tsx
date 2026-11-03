@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { listSocietiesForPlayer } from "@/lib/societies";
 import { listEventsForAdmin } from "@/lib/events";
 import { NewEventWizard } from "@/components/NewEventWizard";
+import type { EventFormat } from "@/lib/eventFormats";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default async function NewEventPage({
         name: previous.name,
         date: previous.date,
         startTime: previous.startTime,
-        format: previous.format as "STABLEFORD" | "STROKE_PLAY" | "TEXAS_SCRAMBLE",
+        format: previous.format as EventFormat,
         handicapAllowance: previous.handicapAllowance,
         maxPlayers: previous.maxPlayers,
         courseId: previous.courseId,

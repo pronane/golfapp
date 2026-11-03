@@ -8,6 +8,7 @@ import { GamesPanels, SponsorStrip } from "./GamesPanels";
 import { ShareButton } from "./ShareButton";
 import { LiveDot, Trophy } from "./Icons";
 import { useLiveBoard } from "./useLiveBoard";
+import { isStablefordBoard } from "@/lib/eventFormats";
 
 function relative(date: Date | null) {
   if (!date) return "waiting";
@@ -31,7 +32,7 @@ export function LiveLeaderboard({ initial, tv = false }: { initial: LeaderboardP
 
   const scramble = data.event.format === "TEXAS_SCRAMBLE";
   const teams = data.teams ?? [];
-  const isStableford = data.event.format === "STABLEFORD" || scramble;
+  const isStableford = isStablefordBoard(data.event.format) || scramble;
   const started = scramble ? teams.some((t) => t.thru > 0) : data.standings.some((s) => s.thru > 0);
   const hidden = (data as LeaderboardPayloadWithHidden).hidden;
 
@@ -374,7 +375,7 @@ function TvBoard({ data, changed, live }: { data: LeaderboardPayload; changed: s
   const scroller = useRef<HTMLDivElement>(null);
   const [clock, setClock] = useState("");
   const scramble = data.event.format === "TEXAS_SCRAMBLE";
-  const isStableford = data.event.format === "STABLEFORD" || scramble;
+  const isStableford = isStablefordBoard(data.event.format) || scramble;
   const rows = scramble
     ? (data.teams ?? []).map((t) => ({
         key: t.groupId,

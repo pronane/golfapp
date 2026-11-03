@@ -9,6 +9,7 @@ import { isScrambleFormat, type ScrambleStanding } from "./scramble";
 import { getGroupScrambleCard, loadScrambleTeams, type GroupScrambleCard } from "./scrambleScores";
 import { buildGames, getGameSettings, listSideEntries, type GamesPayload, type SideHole } from "./games";
 import { bandPlayers, splitIntoFlights } from "./flights";
+import { boardFormat } from "./eventFormats";
 
 export type PublicEvent = {
   id: string;
@@ -167,7 +168,7 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
     ? []
     : rankStandings(
         rows,
-        event.format === "STROKE_PLAY" ? "STROKE_PLAY" : "STABLEFORD",
+        boardFormat(event.format),
         holeInfo.length || 18,
       );
 
@@ -200,7 +201,7 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
   // handicap it was given, then re-rank inside each band so a flight member sees
   // "1st" in their own division. A scramble is flighted by team, which this
   // does not do - the organiser gets one team board.
-  const rankMode = event.format === "STROKE_PLAY" ? "STROKE_PLAY" : "STABLEFORD";
+  const rankMode = boardFormat(event.format);
   const flights =
     !scramble && games.settings.flights >= 2
       ? splitIntoFlights(rows, bandPlayers(rows, games.settings.flights)).map((flight) => ({

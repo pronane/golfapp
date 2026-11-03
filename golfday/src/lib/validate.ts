@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiError } from "./http";
+import { EVENT_FORMATS } from "@/lib/eventFormats";
 
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const timeString = z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM");
@@ -79,7 +80,7 @@ export const createEventSchema = z.object({
   date: dateString,
   startTime: timeString.default("08:00"),
   courseId: z.string().min(1).nullable().optional(),
-  format: z.enum(["STABLEFORD", "STROKE_PLAY", "TEXAS_SCRAMBLE"]).default("STABLEFORD"),
+  format: z.enum(EVENT_FORMATS).default("STABLEFORD"),
   handicapAllowance: z.coerce.number().int().min(0).max(100).default(95),
   maxPlayers: z.coerce.number().int().min(1).max(200).default(72),
   status: z.enum(["DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).default("DRAFT"),
@@ -99,7 +100,7 @@ export const updateEventSchema = z.object({
   date: dateString.optional(),
   startTime: timeString.optional(),
   courseId: z.string().nullable().optional(),
-  format: z.enum(["STABLEFORD", "STROKE_PLAY", "TEXAS_SCRAMBLE"]).optional(),
+  format: z.enum(EVENT_FORMATS).optional(),
   handicapAllowance: z.coerce.number().int().min(0).max(100).optional(),
   maxPlayers: z.coerce.number().int().min(1).max(200).optional(),
   status: z.enum(["DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BLANK_CARD, CourseCardEditor, type CardHole } from "./CourseCardEditor";
+import { formatSummary, isGrossFormat, type EventFormat } from "@/lib/eventFormats";
 
 type SavedCourse = {
   id: string;
@@ -39,7 +40,7 @@ export type LastEvent = {
   name: string;
   date: string;
   startTime: string;
-  format: "STABLEFORD" | "STROKE_PLAY" | "TEXAS_SCRAMBLE";
+  format: EventFormat;
   handicapAllowance: number;
   maxPlayers: number;
   courseId: string | null;
@@ -69,7 +70,7 @@ export function NewEventWizard({
     description: "",
     date: todayPlus(14),
     startTime: "08:30",
-    format: "STABLEFORD" as "STABLEFORD" | "STROKE_PLAY" | "TEXAS_SCRAMBLE",
+    format: "STABLEFORD" as EventFormat,
     handicapAllowance: 95,
     maxPlayers: 48,
     isPublic: true,
@@ -135,6 +136,19 @@ export function NewEventWizard({
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  /**
+   * Changing the format moves the allowance with it: a gross day plays off
+   * zero shots, and switching back to a net format restores the usual 95%
+   * rather than inheriting the gross rule.
+   */
+  const chooseFormat = (next: EventFormat) =>
+    setForm((prev) => {
+      const wasGross = isGrossFormat(prev.format);
+      const willBeGross = isGrossFormat(next);
+      const handicapAllowance = willBeGross ? 0 : wasGross && prev.handicapAllowance === 0 ? 95 : prev.handicapAllowance;
+      return { ...prev, format: next, handicapAllowance };
+    });
 
   useEffect(() => {
     if (mode !== "search") return;
@@ -320,10 +334,20 @@ export function NewEventWizard({
           </div>
           <div>
             <label className="label" htmlFor="format">Format</label>
-            <select id="format" className="select" value={form.format} onChange={(e) => set("format", e.target.value as typeof form.format)}>
-              <option value="STABLEFORD">Stableford (points)</option>
-              <option value="STROKE_PLAY">Stroke play (net)</option>
-              <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
+            <select id="format" className="select" value={form.format} onChange={(e) => chooseFormat(e.target.value as EventFormat)}>
+              <optgroup label="Individual">
+                <option value="STABLEFORD">Stableford (points)</option>
+                <option value="STROKE_PLAY">Stroke play (net)</option>
+                <option value="GROSS_STABLEFORD">Stableford (gross)</option>
+                <option value="GROSS_STROKE_PLAY">Stroke play (gross)</option>
+              </optgroup>
+              <optgroup label="Team and games">
+                <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
+                <option value="FOUR_BETTER_BALL">Better-ball pairs (4BBB)</option>
+                <option value="RYDER_CUP">Ryder Cup (team match play)</option>
+                <option value="SKINS_NET">Skins (net)</option>
+                <option value="SKINS_GROSS">Skins (gross)</option>
+              </optgroup>
             </select>
           </div>
           <details className="rounded-xl bg-ink/[0.03] p-3" open={reused}>
@@ -332,8 +356,23 @@ export function NewEventWizard({
             </summary>
             <div className="mt-3 space-y-3">
               <div>
-                <label className="label" htmlFor="allowance">Handicap allowance ({form.handicapAllowance}%)</label>
-                <input id="allowance" type="range" min={0} max={100} step={5} value={form.handicapAllowance} onChange={(e) => set("handicapAllowance", Number(e.target.value))} className="mt-3 w-full accent-fairway-700" />
+                <label className="label" htmlFor="allowance">
+                  {isGrossFormat(form.format) ? "Handicap allowance" : `Handicap allowance (${form.handicapAllowance}%)`}
+                </label>
+                <input
+                  id="allowance"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={isGrossFormat(form.format) ? 0 : form.handicapAllowance}
+                  onChange={(e) => set("handicapAllowance", Number(e.target.value))}
+                  disabled={isGrossFormat(form.format)}
+                  className="mt-3 w-full accent-fairway-700 disabled:opacity-40"
+                />
+                {isGrossFormat(form.format) && (
+                  <p className="mt-1 text-[11.5px] text-ink/50">Gross - everyone plays off the card, no shots given.</p>
+                )}
               </div>
               <div>
                 <label className="label" htmlFor="max">Max players</label>
@@ -519,12 +558,7 @@ export function NewEventWizard({
             <Row label="Event" value={form.name} />
             <Row label="When" value={`${form.date} · first tee ${form.startTime}`} />
             <Row label="Course" value={mode === "later" ? "To be confirmed" : mode === "manual" ? `${manual.name}${manual.club ? `, ${manual.club}` : ""}` : selectedLabel ?? "—"} />
-            <Row
-              label="Format"
-              value={`${form.format === "STABLEFORD" ? "Stableford" : form.format === "TEXAS_SCRAMBLE" ? "Texas scramble" : "Net stroke play"} · ${
-                form.format === "TEXAS_SCRAMBLE" ? "scramble team handicap" : `${form.handicapAllowance}% allowance`
-              }`}
-            />
+            <Row label="Format" value={formatSummary(form.format, form.handicapAllowance)} />
             <Row label="Field" value={`up to ${form.maxPlayers} players`} />
             <Row label="Visibility" value={form.isPublic ? "Public" : "Private"} />
           </dl>
