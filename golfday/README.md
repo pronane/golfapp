@@ -317,6 +317,15 @@ credentials, and card payments unless you add Stripe keys).
 [`docs/HOSTING.md`](docs/HOSTING.md) has the provider-by-provider comparison; GolfCourseAPI and the
 Golf England CDH adapter are covered in [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 
+### What it costs to run, and what to charge for it
+
+[`docs/MONETISATION.md`](docs/MONETISATION.md) prices the whole thing: what one golf day costs to
+run (2p-37p of hosting, measured, not guessed), Vercel / Render / Cloudflare / Hetzner at 1,000,
+2,000, 5,000 and 10,000 active monthly users, a proposed price list (£15 a day, £79 a year per
+society, £249 a year per club, sponsor slots) against what Golf Genius, HowDidiDo and Squabbit
+charge, and how few paying organisers it takes to cover the bill. Every table in it is produced by
+`npm run model:pricing`, so the assumptions can be changed and re-run rather than argued with.
+
 ### GitHub, specifically
 
 GitHub Pages cannot host the app - it serves files, and sign-up/sign-in/score entry are writes
