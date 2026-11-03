@@ -102,7 +102,7 @@ export const events = sqliteTable("events", {
   startTime: text("start_time").notNull().default("08:00"), // HH:MM (local to venue)
   courseId: text("course_id"),
   courseName: text("course_name"), // snapshot in case a course is deleted
-  format: text("format").notNull().default("STABLEFORD"), // STABLEFORD | STROKE_PLAY | TEXAS_SCRAMBLE
+  format: text("format").notNull().default("STABLEFORD"), // see src/lib/eventFormats.ts for the full catalogue
   handicapAllowance: integer("handicap_allowance").notNull().default(95),
   status: text("status").notNull().default("DRAFT"), // DRAFT | OPEN | IN_PROGRESS | COMPLETED | CANCELLED
   maxPlayers: integer("max_players").notNull().default(72),

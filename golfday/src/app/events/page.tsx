@@ -5,6 +5,7 @@ import { formatLabel } from "@/lib/status";
 import { formatEventDate } from "@/lib/format";
 import { JoinByCode } from "@/components/JoinByCode";
 import { LiveDot } from "@/components/Icons";
+import { allowanceLabel } from "@/lib/eventFormats";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,7 @@ export default async function EventsPage() {
                   <div className="mt-2.5 flex flex-wrap gap-2 text-[12px]">
                     <span className="pill bg-ink/[0.04] text-ink/60 ring-ink/10">{Number(playerCount)} entered</span>
                     <span className="pill bg-ink/[0.04] text-ink/60 ring-ink/10">{formatLabel(event.format)}</span>
-                    <span className="pill bg-ink/[0.04] text-ink/60 ring-ink/10">{event.handicapAllowance}% allowance</span>
+                    <span className="pill bg-ink/[0.04] text-ink/60 ring-ink/10">{allowanceLabel(event.format, event.handicapAllowance)}</span>
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col gap-2">

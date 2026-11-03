@@ -11,6 +11,8 @@ import { PayEntryButton } from "@/components/PayEntryButton";
 import { getGameSettings } from "@/lib/games";
 import { formatPence, getPayment, stripeEnabled } from "@/lib/payments";
 import { Arrow, LiveDot, Trophy } from "@/components/Icons";
+import { allowanceLabel, isStablefordBoard } from "@/lib/eventFormats";
+import { formatLabel } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +68,7 @@ export default async function EventPage({
           position: s.position,
           tied: s.tied,
           thru: s.thru,
-          value: event.format === "STABLEFORD" ? String(s.points) : formatToPar(s.netToPar),
+          value: isStablefordBoard(event.format) ? String(s.points) : formatToPar(s.netToPar),
           toPar: s.toPar,
         }));
 
@@ -81,9 +83,9 @@ export default async function EventPage({
                   {event.status === "IN_PROGRESS" && <LiveDot />} {STATUS_LABEL[event.status]}
                 </span>
                 <span className="pill hero-chip">
-                  {event.format === "STABLEFORD" ? "Stableford" : event.format === "TEXAS_SCRAMBLE" ? "Texas scramble" : "Net stroke play"}
+                  {formatLabel(event.format)}
                 </span>
-                <span className="pill hero-chip">{event.handicapAllowance}% allowance</span>
+                <span className="pill hero-chip">{allowanceLabel(event.format, event.handicapAllowance)}</span>
               </div>
               <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">{event.name}</h1>
               <p className="mt-1 text-[13.5px] hero-muted">
@@ -159,7 +161,7 @@ export default async function EventPage({
               <thead>
                 <tr>
                   <th className="w-10">Pos</th><th>{scramble ? "Team" : "Player"}</th><th className="text-center">Thru</th>
-                  <th className="text-center">{scramble || event.format === "STABLEFORD" ? "Pts" : "Net"}</th>
+                  <th className="text-center">{scramble || isStablefordBoard(event.format) ? "Pts" : "Net"}</th>
                   <th className="text-center">To par</th>
                 </tr>
               </thead>

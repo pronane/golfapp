@@ -9,6 +9,8 @@ import { updateEventSchema, validate } from "@/lib/validate";
 import { deleteEventGames } from "@/lib/games";
 import { deleteScrambleScoresForEvent } from "@/lib/scrambleScores";
 import { deleteEventPayments } from "@/lib/payments";
+import { gamesPreset, isGrossFormat } from "@/lib/eventFormats";
+import { getGameSettings, saveGameSettings } from "@/lib/games";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,15 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
   for (const key of ["name", "description", "date", "startTime", "format", "handicapAllowance", "maxPlayers", "status", "isPublic", "allowCourseClash"] as const) {
     if (body[key] !== undefined) updates[key] = body[key];
   }
+  // The format decides the allowance for gross days, not the other way round.
+  const finalFormat = (updates.format as string | undefined) ?? access.event.format;
+  if (isGrossFormat(finalFormat)) {
+    updates.handicapAllowance = 0;
+  } else if (updates.format !== undefined && updates.format !== access.event.format && access.event.handicapAllowance === 0 && body.handicapAllowance === undefined) {
+    // Switching a gross day back to net: 0 was the gross rule, not a choice.
+    updates.handicapAllowance = 95;
+  }
+  const formatChanged = updates.format !== undefined && updates.format !== access.event.format;
   if (body.courseId !== undefined && body.courseId !== access.event.courseId) {
     updates.courseId = body.courseId;
     if (body.courseId) {
@@ -77,6 +88,13 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
     await db.update(events).set(updates).where(eq(events.id, id));
   }
   if (body.handicapAllowance !== undefined) await recalculateHandicaps(id);
+  if (formatChanged) {
+    // The Games tab follows the format - pairs for 4BBB, the match board for a
+    // Ryder Cup, the pot for skins - merged over whatever the organiser has
+    // already set up, so side games, sponsors and the entry fee survive.
+    const settings = await getGameSettings(id);
+    await saveGameSettings(id, { ...settings, ...gamesPreset(String(updates.format)) });
+  }
   await bumpRevision(id);
   return json({ ok: true });
 });

@@ -5,6 +5,7 @@ import { getEventBundle } from "@/lib/events";
 import { getEventAccess } from "@/lib/http";
 import { formatEventDate } from "@/lib/format";
 import { formatLabel } from "@/lib/status";
+import { allowanceLabel } from "@/lib/eventFormats";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,7 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
                   <h2 className="mt-0.5 text-xl font-extrabold leading-tight">{group.name}</h2>
                   <p className="text-[13px]">
                     {group.teeTime ? `Tee ${group.teeTime} · ` : ""}
-                    {formatLabel(event.format)} · {event.handicapAllowance}% allowance
+                    {formatLabel(event.format)} · {allowanceLabel(event.format, event.handicapAllowance)}
                   </p>
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}

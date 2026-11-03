@@ -10,6 +10,7 @@ import { formatEventDate, formatToPar } from "@/lib/format";
 import { ProfileCard } from "@/components/ProfileCard";
 import { ClaimPlayer } from "@/components/ClaimPlayer";
 import { Arrow, LiveDot, Trophy } from "@/components/Icons";
+import { isStablefordBoard } from "@/lib/eventFormats";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ export default async function DashboardPage() {
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <Stat label="Position" value={myRow ? `${myRow.position}` : "—"} sub={myRow?.tied ? "tied" : ""} />
-              <Stat label="Points" value={myRow ? String(myRow.points) : "0"} sub={liveBoard.event.format === "STABLEFORD" ? "stableford" : "stroke"} />
+              <Stat label="Points" value={myRow ? String(myRow.points) : "0"} sub={isStablefordBoard(liveBoard.event.format) ? "stableford" : "stroke"} />
               <Stat label="Thru" value={myRow ? String(myRow.thru) : "0"} sub={`of ${liveBoard.holes.length}`} />
             </div>
           </div>

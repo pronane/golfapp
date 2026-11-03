@@ -10,6 +10,7 @@ import { isScrambleFormat } from "@/lib/scramble";
 import { scoreWriteRule } from "@/lib/status";
 import { strokesReceived } from "@/lib/handicap";
 import { scoreSchema, validate } from "@/lib/validate";
+import { isStablefordBoard } from "@/lib/eventFormats";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,7 @@ export const POST = route(async (request: Request) => {
   if (!hole) throw new ApiError(404, "That hole is not part of this course", "hole_not_found");
 
   const received = strokesReceived(registration.playingHandicap, hole.strokeIndex);
-  const points = event.format === "STABLEFORD" ? stablefordPoints(hole.par, body.strokes, received) : 0;
+  const points = isStablefordBoard(event.format) ? stablefordPoints(hole.par, body.strokes, received) : 0;
 
   const [existing] = await db
     .select()

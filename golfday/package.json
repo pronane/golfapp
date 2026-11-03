@@ -20,7 +20,8 @@
     "seed:import": "tsx scripts/demo-sql.ts import",
     "e2e:formats": "node e2e/all-formats.mjs",
     "e2e:upgrade": "node e2e/upgrade.mjs",
-    "model:pricing": "node scripts/pricing-model.mjs"
+    "model:pricing": "node scripts/pricing-model.mjs",
+    "outreach": "node scripts/outreach.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

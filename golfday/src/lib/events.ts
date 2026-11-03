@@ -17,7 +17,8 @@ import {
 import { ApiError } from "./http";
 import { saveCourse } from "./courses";
 import { deleteScrambleScoresForGroup } from "./scrambleScores";
-import { getGameSettings, saveGameSettings } from "./games";
+import { DEFAULT_SETTINGS, getGameSettings, saveGameSettings } from "./games";
+import { effectiveAllowance, gamesPreset, hasGamesPreset, isGrossFormat, type EventFormat } from "./eventFormats";
 import { fetchCourse } from "./courseApi";
 import { courseHandicap, DEFAULT_TEE, parseTees, playingHandicap as calcPlayingHandicap, type Tee } from "./handicap";
 import { newId, newJoinCode, newToken, uniqueSlug } from "./ids";
@@ -135,7 +136,7 @@ export type CreateEventInput = {
   date: string;
   startTime?: string;
   courseId?: string | null;
-  format?: "STABLEFORD" | "STROKE_PLAY" | "TEXAS_SCRAMBLE";
+  format?: EventFormat;
   handicapAllowance?: number;
   maxPlayers?: number;
   status?: EventStatus;
@@ -266,7 +267,7 @@ export async function createEvent(input: CreateEventInput) {
     courseId,
     courseName,
     format: input.format ?? "STABLEFORD",
-    handicapAllowance: input.handicapAllowance ?? 95,
+    handicapAllowance: isGrossFormat(input.format ?? "STABLEFORD") ? 0 : input.handicapAllowance ?? 95,
     status: input.status ?? "DRAFT",
     maxPlayers: input.maxPlayers ?? 72,
     joinCode,
@@ -290,6 +291,12 @@ export async function createEvent(input: CreateEventInput) {
     role: "OWNER",
   });
   await db.insert(eventState).values({ eventId: id, revision: 1 });
+  // A 4BBB day needs its pairs board, a Ryder Cup its match board, a skins day
+  // its pot - switched on with the event so the Games tab is right from the
+  // first visit, whoever created it (wizard, API or "run it again").
+  if (hasGamesPreset(input.format ?? "STABLEFORD")) {
+    await saveGameSettings(id, { ...DEFAULT_SETTINGS, ...gamesPreset(input.format ?? "STABLEFORD") });
+  }
   if (input.societyId) {
     await db.insert(societyEvents).values({ id: newId(), societyId: input.societyId, eventId: id });
   }
@@ -550,7 +557,7 @@ export async function registerPlayer(input: RegisterPlayerInput) {
   const tees = parseTees(course?.course.tees);
   const tee: Tee = tees.find((t) => t.name.toLowerCase() === (input.tee ?? "White").toLowerCase()) ?? tees[0] ?? DEFAULT_TEE;
   const ch = courseHandicap(player.handicapIndex, tee);
-  const ph = calcPlayingHandicap(ch, event.handicapAllowance);
+  const ph = calcPlayingHandicap(ch, effectiveAllowance(event.format, event.handicapAllowance));
 
   const [existing] = await db
     .select()
@@ -658,7 +665,7 @@ export async function recalculateHandicaps(eventId: string) {
   for (const { registration, player } of regs) {
     const tee = tees.find((t) => t.name.toLowerCase() === registration.tee.toLowerCase()) ?? tees[0] ?? DEFAULT_TEE;
     const ch = courseHandicap(player.handicapIndex, tee);
-    const ph = calcPlayingHandicap(ch, event.handicapAllowance);
+    const ph = calcPlayingHandicap(ch, effectiveAllowance(event.format, event.handicapAllowance));
     if (ch !== registration.courseHandicap || ph !== registration.playingHandicap || player.handicapIndex !== registration.handicapIndex) {
       await db
         .update(eventPlayers)

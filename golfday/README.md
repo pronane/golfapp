@@ -183,6 +183,13 @@ MP4 and the full script for all three. Static screenshots of every screen are in
 
 ### Formats, societies and seasons
 
+* **Every format in one list** - the wizard and the console both offer the full
+  catalogue (`src/lib/eventFormats.ts`): Stableford and stroke play in net **and gross**,
+  Texas scramble, better-ball pairs (4BBB), Ryder Cup team match play, and skins (net or
+  gross). Picking a team or skins format switches the matching Games-tab board on at
+  creation; gross formats pin the handicap allowance to zero, always. Not built yet (and
+  not claimed anywhere): foursomes, greensomes, shamble, best-two-of-four and multi-round
+  events - those need their own scoring passes.
 * **Texas scramble** - a team card instead of four individual ones. Set the format when
   you create the day; each tee group is a team, a hole takes one gross score, and the
   team handicap is the England Golf scramble allowance (25/20/15/10 of the players'
