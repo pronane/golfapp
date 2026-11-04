@@ -1,9 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { eventPlayers, groups, players, scores, scrambleScores } from "@/db/schema";
+import { eventPlayers, groups, pairScores, players, scores, scrambleScores } from "@/db/schema";
 import { ApiError, json, requireEventAccess, requireUser, route } from "@/lib/http";
 import { getEventBundle } from "@/lib/events";
 import { isScrambleFormat } from "@/lib/scramble";
+import { teamBoardKind } from "@/lib/eventFormats";
+import { listPairs } from "@/lib/games";
 
 export const dynamic = "force-dynamic";
 
@@ -49,12 +51,40 @@ export const GET = route(async (_request: Request, ctx: Ctx) => {
             .map((row) => ({ holeNumber: row.holeNumber, strokes: row.strokes, drivePlayerId: row.drivePlayerId })),
         })),
       cards: [],
+      pairCards: [],
+      rounds: bundle.event.rounds ?? 1,
+    });
+  }
+
+  const rounds = bundle.event.rounds ?? 1;
+
+  // Foursomes / greensomes: the pair is the card.
+  if (teamBoardKind(bundle.event.format) === "PAIR") {
+    const pairRows = await listPairs(id);
+    const cardRows = await db.select().from(pairScores).where(eq(pairScores.eventId, id));
+    return json({
+      format: bundle.event.format,
+      rounds,
+      holes: bundle.holes.map((h) => ({ holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex })),
+      cards: [],
+      teams: [],
+      pairCards: pairRows.map((pair) => ({
+        pairId: pair.id,
+        name: pair.name,
+        members: registered
+          .filter((r) => r.player.id === pair.playerA || r.player.id === pair.playerB)
+          .map((r) => ({ playerId: r.player.id, name: r.player.name })),
+        scores: cardRows
+          .filter((row) => row.pairId === pair.id)
+          .map((row) => ({ holeNumber: row.holeNumber, strokes: row.strokes })),
+      })),
     });
   }
 
   const scoreRows = await db.select().from(scores).where(eq(scores.eventId, id));
   return json({
     format: bundle.event.format,
+    rounds,
     holes: bundle.holes.map((h) => ({ holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex })),
     cards: registered.map(({ player, registration }) => ({
       playerId: player.id,
@@ -63,8 +93,9 @@ export const GET = route(async (_request: Request, ctx: Ctx) => {
       playingHandicap: registration.playingHandicap,
       scores: scoreRows
         .filter((row) => row.playerId === player.id)
-        .map((row) => ({ holeNumber: row.holeNumber, strokes: row.strokes })),
+        .map((row) => ({ holeNumber: row.holeNumber, strokes: row.strokes, round: row.round ?? 1 })),
     })),
     teams: [],
+    pairCards: [],
   });
 });

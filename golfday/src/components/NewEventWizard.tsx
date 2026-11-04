@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BLANK_CARD, CourseCardEditor, type CardHole } from "./CourseCardEditor";
-import { formatSummary, isGrossFormat, type EventFormat } from "@/lib/eventFormats";
+import { formatSummary, isGrossFormat, supportsRounds, type EventFormat } from "@/lib/eventFormats";
 
 type SavedCourse = {
   id: string;
@@ -41,6 +41,7 @@ export type LastEvent = {
   date: string;
   startTime: string;
   format: EventFormat;
+  rounds: number;
   handicapAllowance: number;
   maxPlayers: number;
   courseId: string | null;
@@ -71,6 +72,7 @@ export function NewEventWizard({
     date: todayPlus(14),
     startTime: "08:30",
     format: "STABLEFORD" as EventFormat,
+    rounds: 1,
     handicapAllowance: 95,
     maxPlayers: 48,
     isPublic: true,
@@ -116,6 +118,7 @@ export function NewEventWizard({
       name: source.name,
       startTime: source.startTime,
       format: source.format,
+      rounds: source.rounds ?? 1,
       handicapAllowance: source.handicapAllowance,
       maxPlayers: source.maxPlayers,
     }));
@@ -233,6 +236,7 @@ export function NewEventWizard({
           startTime: form.startTime,
           ...course,
           format: form.format,
+          rounds: form.rounds,
           handicapAllowance: Number(form.handicapAllowance),
           maxPlayers: Number(form.maxPlayers),
           isPublic: form.isPublic,
@@ -343,6 +347,10 @@ export function NewEventWizard({
               </optgroup>
               <optgroup label="Team and games">
                 <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
+                <option value="FOURSOMES">Foursomes (alternate shot)</option>
+                <option value="GREENSOMES">Greensomes (best drive)</option>
+                <option value="SHAMBLE">Shamble (best net a hole)</option>
+                <option value="BEST_2_OF_4">Best two of four</option>
                 <option value="FOUR_BETTER_BALL">Better-ball pairs (4BBB)</option>
                 <option value="RYDER_CUP">Ryder Cup (team match play)</option>
                 <option value="SKINS_NET">Skins (net)</option>
@@ -374,6 +382,22 @@ export function NewEventWizard({
                   <p className="mt-1 text-[11.5px] text-ink/50">Gross - everyone plays off the card, no shots given.</p>
                 )}
               </div>
+              {supportsRounds(form.format) && (
+                <div>
+                  <label className="label" htmlFor="rounds">
+                    Rounds (how many times the card is played)
+                  </label>
+                  <select id="rounds" className="select" value={form.rounds} onChange={(e) => set("rounds", Number(e.target.value))}>
+                    <option value={1}>1 - a normal day</option>
+                    <option value={2}>2 - a two-day event</option>
+                    <option value={3}>3</option>
+                    <option value={4}>4</option>
+                  </select>
+                  <p className="mt-1 text-[11.5px] text-ink/50">
+                    Rounds add into one leaderboard; countback runs from the end of the last round.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="label" htmlFor="max">Max players</label>
                 <input id="max" type="number" min={1} max={200} className="input" value={form.maxPlayers} onChange={(e) => set("maxPlayers", Number(e.target.value))} />
@@ -558,7 +582,10 @@ export function NewEventWizard({
             <Row label="Event" value={form.name} />
             <Row label="When" value={`${form.date} · first tee ${form.startTime}`} />
             <Row label="Course" value={mode === "later" ? "To be confirmed" : mode === "manual" ? `${manual.name}${manual.club ? `, ${manual.club}` : ""}` : selectedLabel ?? "—"} />
-            <Row label="Format" value={formatSummary(form.format, form.handicapAllowance)} />
+            <Row
+              label="Format"
+              value={`${formatSummary(form.format, form.handicapAllowance)}${form.rounds > 1 ? ` · ${form.rounds} rounds` : ""}`}
+            />
             <Row label="Field" value={`up to ${form.maxPlayers} players`} />
             <Row label="Visibility" value={form.isPublic ? "Public" : "Private"} />
           </dl>

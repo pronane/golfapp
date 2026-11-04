@@ -7,10 +7,12 @@
  * This drives the HTTP API exactly as the browser does (sign in, create a golf
  * day, register the field, allocate groups, enter every hole, watch the live
  * feed) rather than clicking through a browser, so it runs anywhere Node runs
- * and completes three formats in one pass. It owns its database file and its
+ * and completes every format in one pass. It owns its database file and its
  * port and never touches your data.
  *
- * For each of STABLEFORD, STROKE_PLAY and TEXAS_SCRAMBLE it checks:
+ * For each entry in FORMATS - every format in the catalogue plus a two-day
+ * medal - it checks:
+ *   0. the Games preset and handicap allowance stored with the event
  *   1. a 19-player field being registered, with playing handicaps applied
  *   2. random (size 4) and manual four-ball allocation, plus edits before tee off
  *   3. invitation emails carrying the join code and each group's card link
@@ -49,7 +51,52 @@ const FORMATS = [
   { format: "STABLEFORD", label: "Stableford", allowance: 95, date: "2026-05-09" },
   { format: "STROKE_PLAY", label: "Stroke play", allowance: 100, date: "2026-05-16" },
   { format: "TEXAS_SCRAMBLE", label: "Texas scramble", allowance: 100, date: "2026-05-23" },
+  { format: "GROSS_STABLEFORD", label: "Stableford (gross)", allowance: 0, date: "2026-05-30" },
+  { format: "GROSS_STROKE_PLAY", label: "Stroke play (gross)", allowance: 0, date: "2026-06-06" },
+  { format: "FOUR_BETTER_BALL", label: "Better-ball pairs", allowance: 95, date: "2026-06-13" },
+  { format: "RYDER_CUP", label: "Ryder Cup", allowance: 95, date: "2026-06-20" },
+  { format: "SKINS_NET", label: "Skins (net)", allowance: 95, date: "2026-06-27" },
+  { format: "SKINS_GROSS", label: "Skins (gross)", allowance: 0, date: "2026-07-04" },
+  { format: "FOURSOMES", label: "Foursomes", allowance: 95, date: "2026-07-11" },
+  { format: "GREENSOMES", label: "Greensomes", allowance: 95, date: "2026-07-18" },
+  { format: "SHAMBLE", label: "Shamble", allowance: 95, date: "2026-07-25" },
+  { format: "BEST_2_OF_4", label: "Best two of four", allowance: 95, date: "2026-08-01" },
+  // A two-day medal: the same card played twice, one aggregate leaderboard.
+  { format: "STROKE_PLAY", label: "Two-day medal", allowance: 100, date: "2026-08-08", rounds: 2 },
 ];
+
+/** Which scoring path a format takes (mirrors src/lib/eventFormats.ts). */
+const teamBoardKind = (format) =>
+  format === "TEXAS_SCRAMBLE"
+    ? "SCRAMBLE"
+    : format === "FOURSOMES" || format === "GREENSOMES"
+      ? "PAIR"
+      : format === "SHAMBLE" || format === "BEST_2_OF_4"
+        ? "DERIVED"
+        : null;
+
+/**
+ * Which formats rank the main table by Stableford points rather than net to
+ * par. Deliberately re-derived here instead of imported from the app: this
+ * file is the independent oracle, so it must not share the implementation's
+ * answer key.
+ */
+const STABLEFORD_BOARD = new Set([
+  "STABLEFORD",
+  "GROSS_STABLEFORD",
+  "FOUR_BETTER_BALL",
+  "RYDER_CUP",
+  "TEXAS_SCRAMBLE",
+]);
+const stablefordBoard = (format) => STABLEFORD_BOARD.has(format);
+
+/** The Games preset each format must have been created with (server-side). */
+const PRESETS = {
+  FOUR_BETTER_BALL: { teamFormat: "FOURBBB", skins: "OFF" },
+  RYDER_CUP: { teamFormat: "MATCHPLAY", skins: "OFF" },
+  SKINS_NET: { teamFormat: "NONE", skins: "NET" },
+  SKINS_GROSS: { teamFormat: "NONE", skins: "GROSS" },
+};
 
 let stepNo = 0;
 let checks = 0;
@@ -297,7 +344,7 @@ async function buildField(adminCookie) {
   return { ids, players: [...before.slice(0, FIELD_SIZE - 1), fresh[0]] };
 }
 
-async function createEvent(adminCookie, { name, format, allowance, date, courseId, maxPlayers }) {
+async function createEvent(adminCookie, { name, format, allowance, date, courseId, maxPlayers, rounds }) {
   const created = await call("POST", "/api/events", {
     cookie: adminCookie,
     body: {
@@ -307,6 +354,7 @@ async function createEvent(adminCookie, { name, format, allowance, date, courseI
       startTime: "09:00",
       courseId,
       format,
+      rounds: rounds ?? 1,
       handicapAllowance: allowance,
       maxPlayers,
       status: "OPEN",
@@ -341,7 +389,11 @@ async function enterField(adminCookie, event, ids) {
 async function runFormat(ctx, config) {
   const { adminCookie, courseId, playerCookies, fieldIds } = ctx;
   const label = config.label;
-  section(`${label} (${config.format}, ${config.allowance}% allowance)`);
+  const allowanceNote = config.allowance === 0 ? "gross, no allowance" : `${config.allowance}% allowance`;
+  const rounds = config.rounds ?? 1;
+  const kind = teamBoardKind(config.format);
+  const teamCard = kind === "SCRAMBLE" || kind === "PAIR";
+  section(`${label} (${config.format}, ${allowanceNote}${rounds > 1 ? `, ${rounds} rounds` : ""})`);
 
   let event;
   let groups;
@@ -357,6 +409,7 @@ async function runFormat(ctx, config) {
       date: config.date,
       courseId,
       maxPlayers: 40,
+      rounds,
     });
     const ids = await enterField(adminCookie, event, fieldIds);
     const data = await bundle(adminCookie, event.id);
@@ -365,6 +418,26 @@ async function runFormat(ctx, config) {
     registrations = data.registrations;
     holes = data.holes;
     check(ids.length === FIELD_SIZE, "field sizes disagree between the directory and the event");
+  });
+
+  await step("the format's Games preset and handicap allowance are stored with the event", async () => {
+    const preset = PRESETS[config.format] ?? { teamFormat: "NONE", skins: "OFF" };
+    const games = await call("GET", `/api/events/${event.id}/games`, { cookie: adminCookie });
+    must(games.status === 200, `could not read the games settings (${games.status})`);
+    check(
+      games.body.settings.teamFormat === preset.teamFormat,
+      `teamFormat is ${games.body.settings.teamFormat}, the ${label} preset says ${preset.teamFormat}`,
+    );
+    check(
+      games.body.settings.skins === preset.skins,
+      `skins is ${games.body.settings.skins}, the ${label} preset says ${preset.skins}`,
+    );
+    const data = await bundle(adminCookie, event.id);
+    check(
+      data.event.handicapAllowance === config.allowance,
+      `stored allowance is ${data.event.handicapAllowance}, expected ${config.allowance}`,
+    );
+    note(`preset: teamFormat ${preset.teamFormat}, skins ${preset.skins}, allowance ${config.allowance}`);
   });
 
   await step("playing handicaps follow index, slope, rating and the event allowance", async () => {
@@ -581,40 +654,89 @@ async function runFormat(ctx, config) {
       return;
     }
 
+    if (kind === "PAIR") {
+      // Foursomes / greensomes: one card per pair, opened with the four-ball's
+      // scoring link (the same token the invite carries). Pairs are drawn from
+      // the tee groups exactly as the console's button does it.
+      const paired = await call("POST", `/api/events/${event.id}/pairs`, { cookie: adminCookie, body: { auto: true } });
+      must(paired.status === 200, `auto-pairing failed (${paired.status}) ${JSON.stringify(paired.body)}`);
+      const games = (await call("GET", `/api/events/${event.id}/games`, { cookie: adminCookie })).body;
+      const pairRows = games.pairs ?? [];
+      must(pairRows.length === 9, `expected 9 pairs, got ${pairRows.length}`);
+      const groupToken = new Map(groups.map((g) => [g.id, g.token]));
+      const reg = new Map(data.registrations.map((r) => [r.player.id, r.registration]));
+      for (const pair of pairRows) {
+        const entry = { pair, holes: [] };
+        const tokenA = groupToken.get(reg.get(pair.playerA)?.groupId ?? "");
+        for (const hole of holes) {
+          const strokes = grossFor(hole.par, random);
+          const result = await call("POST", "/api/pair-scores", {
+            body: { eventId: event.id, pairId: pair.id, holeNumber: hole.holeNumber, strokes, token: tokenA },
+          });
+          must(
+            result.status === 200,
+            `pair hole ${hole.holeNumber} for ${pair.name} failed (${result.status}) ${JSON.stringify(result.body)}`,
+          );
+          entry.holes.push({ ...hole, strokes });
+        }
+        scorecard.push(entry);
+      }
+      note(`${scorecard.length} pair cards x 18 holes entered (group token)`);
+      return;
+    }
+
     for (const { player, registration } of data.registrations) {
       const group = groups.find((g) => g.id === registration.groupId);
       const entry = { player, registration, group, holes: [] };
-      for (const hole of holes) {
-        const strokes = grossFor(hole.par, random);
-        const result = await call("POST", "/api/scores", {
-          body: { eventId: event.id, playerId: player.id, holeNumber: hole.holeNumber, strokes, token: group.token },
-        });
-        must(
-          result.status === 200,
-          `hole ${hole.holeNumber} for ${player.name} failed (${result.status}) ${JSON.stringify(result.body)}`,
-        );
-        const received = strokesReceived(registration.playingHandicap, hole.strokeIndex);
-        const stableford = stablefordPoints(hole.par, strokes, received);
-        const expected = config.format === "STABLEFORD" ? stableford : 0;
-        check(
-          result.body.points === expected,
-          `${player.name} hole ${hole.holeNumber}: ${result.body.points} points, expected ${expected}`,
-        );
-        check(
-          result.body.shotsReceived === received,
-          `${player.name} hole ${hole.holeNumber}: ${result.body.shotsReceived} shots received, expected ${received}`,
-        );
-        entry.holes.push({ ...hole, strokes, received, points: stableford });
+      for (let round = 1; round <= rounds; round += 1) {
+        for (const hole of holes) {
+          const strokes = grossFor(hole.par, random);
+          const result = await call("POST", "/api/scores", {
+            body: {
+              eventId: event.id,
+              playerId: player.id,
+              holeNumber: hole.holeNumber,
+              strokes,
+              round,
+              token: group.token,
+            },
+          });
+          must(
+            result.status === 200,
+            `hole ${hole.holeNumber} for ${player.name} failed (${result.status}) ${JSON.stringify(result.body)}`,
+          );
+          const received = strokesReceived(registration.playingHandicap, hole.strokeIndex);
+          const stableford = stablefordPoints(hole.par, strokes, received);
+          const expected = stablefordBoard(config.format) ? stableford : 0;
+          check(
+            result.body.points === expected,
+            `${player.name} r${round} hole ${hole.holeNumber}: ${result.body.points} points, expected ${expected}`,
+          );
+          check(
+            result.body.shotsReceived === received,
+            `${player.name} r${round} hole ${hole.holeNumber}: ${result.body.shotsReceived} shots received, expected ${received}`,
+          );
+          entry.holes.push({ ...hole, round, strokes, received, points: stableford });
+        }
       }
       scorecard.push(entry);
     }
-    note(`${scorecard.length} cards x 18 holes entered`);
+    note(`${scorecard.length} cards x ${18 * rounds} holes entered${rounds > 1 ? ` (${rounds} rounds)` : ""}`);
   });
 
   await step("each scoring endpoint refuses the wrong format and a draft", async () => {
     const fresh = await bundle(adminCookie, event.id);
     const subject = fresh.registrations[0];
-    if (config.format === "TEXAS_SCRAMBLE") {
+    if (kind === "PAIR") {
+      const individual = await call("POST", "/api/scores", {
+        body: { eventId: event.id, playerId: subject.player.id, holeNumber: 1, strokes: 4 },
+      });
+      check(individual.status === 409, `an individual score was accepted on a pair-card event (${individual.status})`);
+      const team = await call("POST", "/api/scramble", {
+        body: { eventId: event.id, groupId: fresh.groups[0].id, holeNumber: 1, strokes: 4, token: fresh.groups[0].token },
+      });
+      check(team.status === 409, `a team card was accepted on a pair-card event (${team.status})`);
+    } else if (config.format === "TEXAS_SCRAMBLE") {
       const individual = await call("POST", "/api/scores", {
         body: { eventId: event.id, playerId: subject.player.id, holeNumber: 1, strokes: 4 },
       });
@@ -629,7 +751,12 @@ async function runFormat(ctx, config) {
 
   await step("every card is complete and the revision advanced with each write", async () => {
     const data = await bundle(adminCookie, event.id);
-    const expected = config.format === "TEXAS_SCRAMBLE" ? groups.length * 18 : FIELD_SIZE * 18;
+    const expected =
+      config.format === "TEXAS_SCRAMBLE"
+        ? groups.length * 18
+        : kind === "PAIR"
+          ? (scorecard.length || 9) * 18
+          : FIELD_SIZE * 18 * rounds;
     check(data.revision >= expected, `revision reached ${data.revision}, expected at least ${expected}`);
     note(`revision ${data.revision} after ${expected} score entries`);
   });
@@ -661,25 +788,94 @@ async function runFormat(ctx, config) {
       return;
     }
 
+    if (kind === "PAIR") {
+      // Foursomes / greensomes: teams are the pairs, the pair handicap is half
+      // the sum of the partners' playing handicaps, and there is no individual
+      // table because the pair is the competitor.
+      check(board.teams?.length === scorecard.length, `expected ${scorecard.length} pair rows, got ${board.teams?.length}`);
+      check((board.standings ?? []).length === 0, "a pair-card event should not list individual standings");
+      const phByPlayer = new Map(registrations.map((r) => [r.player.id, r.registration.playingHandicap]));
+      for (const entry of scorecard) {
+        const row = board.teams.find((t) => t.groupId === entry.pair.id);
+        must(Boolean(row), `${entry.pair.name} is missing from the team board`);
+        const teamPH = Math.round(
+          ((phByPlayer.get(entry.pair.playerA) ?? 0) + (phByPlayer.get(entry.pair.playerB) ?? 0)) / 2,
+        );
+        check(row.teamHandicap === teamPH, `${entry.pair.name} team handicap ${row.teamHandicap} should be ${teamPH}`);
+        let gross = 0;
+        let net = 0;
+        let points = 0;
+        for (const h of entry.holes) {
+          const received = strokesReceived(teamPH, h.strokeIndex);
+          gross += h.strokes;
+          net += h.strokes - received;
+          points += Math.max(0, h.par + 2 - (h.strokes - received));
+        }
+        check(row.gross === gross, `${entry.pair.name} gross ${row.gross} should be ${gross}`);
+        check(row.net === net, `${entry.pair.name} net ${row.net} should be ${net}`);
+        check(row.points === points, `${entry.pair.name} points ${row.points} should be ${points}`);
+        check(row.thru === 18, `${entry.pair.name} shows thru ${row.thru}`);
+        check(row.netToPar === net - par, `${entry.pair.name} net to par ${row.netToPar} should be ${net - par}`);
+      }
+      const order = board.teams.map((t) => t.points);
+      check([...order].sort((a, b) => b - a).join() === order.join(), `pair teams are not sorted by points: ${order.join(",")}`);
+      check(board.teams[0].position === 1, "the leading pair is not in position 1");
+      note(`pair teams: ${board.teams.length}, best ${order[0]} pts, worst ${order.at(-1)} pts`);
+      return;
+    }
+
     check(board.standings.length === FIELD_SIZE, `expected ${FIELD_SIZE} rows, got ${board.standings.length}`);
-    check(board.par === par, `card par is ${board.par}, expected ${par}`);
+    check(board.par === par * rounds, `card par is ${board.par}, expected ${par * rounds}`);
     for (const entry of scorecard) {
       const row = board.standings.find((s) => s.playerId === entry.player.id);
       must(Boolean(row), `${entry.player.name} is missing from the board`);
       const gross = entry.holes.reduce((sum, h) => sum + h.strokes, 0);
       const net = entry.holes.reduce((sum, h) => sum + h.strokes - h.received, 0);
       const points = entry.holes.reduce((sum, h) => sum + h.points, 0);
-      check(row.thru === 18, `${entry.player.name} shows thru ${row.thru}`);
+      check(row.thru === 18 * rounds, `${entry.player.name} shows thru ${row.thru}, expected ${18 * rounds}`);
       check(row.totalStrokes === gross, `${entry.player.name} gross ${row.totalStrokes} should be ${gross}`);
       check(row.totalNet === net, `${entry.player.name} net ${row.totalNet} should be ${net}`);
-      check(row.toPar === gross - par, `${entry.player.name} to par ${row.toPar} should be ${gross - par}`);
+      check(row.toPar === gross - par * rounds, `${entry.player.name} to par ${row.toPar} should be ${gross - par * rounds}`);
       check(row.points === points, `${entry.player.name} points ${row.points} should be ${points}`);
-      check(row.netToPar === net - par, `${entry.player.name} net to par ${row.netToPar} should be ${net - par}`);
+      check(row.netToPar === net - par * rounds, `${entry.player.name} net to par ${row.netToPar} should be ${net - par * rounds}`);
       check(row.playingHandicap === entry.registration.playingHandicap, `${entry.player.name} playing handicap changed on the board`);
     }
 
-    const key = config.format === "STABLEFORD" ? (s) => s.points : (s) => s.netToPar;
-    const sortsBy = config.format === "STABLEFORD" ? "points" : "net to par";
+    if (kind === "DERIVED") {
+      // A shamble / best-two cards everybody AND computes a team board: the
+      // team is the competition, the individual net card is still on the board.
+      must(board.teams?.length === groups.length, `expected ${groups.length} team rows, got ${board.teams?.length}`);
+      check(board.teams[0].position === 1, "the leading team is not in position 1");
+      for (const group of groups) {
+        const members = scorecard.filter((e) => e.group?.id === group.id);
+        const row = board.teams.find((t) => t.groupId === group.id);
+        must(Boolean(row) && members.length > 0, `${group.name} is missing from the team board`);
+        let net = 0;
+        let gross = 0;
+        let points = 0;
+        holes.forEach((hole, index) => {
+          const byNet = members
+            .map((e) => e.holes[index])
+            .map((h) => ({ net: h.strokes - h.received, points: h.points, strokes: h.strokes }))
+            .sort((a, b) => a.net - b.net);
+          const counted = config.format === "BEST_2_OF_4" ? byNet.slice(0, 2) : byNet.slice(0, 1);
+          net += counted.reduce((sum, c) => sum + c.net, 0);
+          gross += counted.reduce((sum, c) => sum + c.strokes, 0);
+          points += counted.reduce((sum, c) => sum + c.points, 0);
+        });
+        check(row.net === net, `${group.name} team net ${row.net} should be ${net}`);
+        check(row.gross === gross, `${group.name} team gross ${row.gross} should be ${gross}`);
+        check(row.points === points, `${group.name} team points ${row.points} should be ${points}`);
+        check(row.thru === 18, `${group.name} shows thru ${row.thru}`);
+        check(row.netToPar === net - par, `${group.name} net to par ${row.netToPar} should be ${net - par}`);
+      }
+      const order = board.teams.map((t) => t.points);
+      check([...order].sort((a, b) => b - a).join() === order.join(), `teams are not sorted by points: ${order.join(",")}`);
+      note(`team board: ${config.format} over ${board.teams.length} teams, best ${order[0]} pts`);
+    }
+
+    const key = stablefordBoard(config.format) ? (s) => s.points : (s) => s.netToPar;
+    const sortsBy = stablefordBoard(config.format) ? "points" : "net to par";
     check(board.standings[0].position === 1, "the leader is not in position 1");
     for (let i = 1; i < board.standings.length; i += 1) {
       const above = board.standings[i - 1];
@@ -690,19 +886,38 @@ async function runFormat(ctx, config) {
       } else {
         check(here.position === above.position + 1, `position jumps from ${above.position} to ${here.position}`);
         check(
-          config.format === "STABLEFORD" ? key(here) <= key(above) : key(here) >= key(above),
+          stablefordBoard(config.format) ? key(here) <= key(above) : key(here) >= key(above),
           `${label} board is out of order at ${here.playerName}: ${key(above)} then ${key(here)} ${sortsBy}`,
         );
       }
     }
     const leaders = board.standings.filter((s) => s.position === 1);
     check(leaders.length === 1 || leaders.every((s) => s.tied), "players level on first place are not marked tied");
-    note(`winner: ${board.standings[0].playerName} (${config.format === "STABLEFORD" ? `${board.standings[0].points} pts` : `${board.standings[0].netToPar} net`})`);
+    note(`winner: ${board.standings[0].playerName} (${stablefordBoard(config.format) ? `${board.standings[0].points} pts` : `${board.standings[0].netToPar} net`})`);
   });
 
   await step("an amended score is re-scored and audited", async () => {
     const entry = scorecard[0];
     const hole = holes[0];
+    if (kind === "PAIR") {
+      const changed = await call("POST", "/api/pair-scores", {
+        cookie: adminCookie,
+        body: { eventId: event.id, pairId: entry.pair.id, holeNumber: hole.holeNumber, strokes: hole.par + 3 },
+      });
+      must(changed.status === 200, `amending a pair hole failed (${changed.status})`);
+      const board = (await call("GET", `/api/events/${event.id}/leaderboard`)).body;
+      const row = board.teams.find((t) => t.groupId === entry.pair.id);
+      const expectedGross = row.gross - (hole.par + 3) + entry.holes[0].strokes;
+      const restored = await call("POST", "/api/pair-scores", {
+        cookie: adminCookie,
+        body: { eventId: event.id, pairId: entry.pair.id, holeNumber: hole.holeNumber, strokes: entry.holes[0].strokes },
+      });
+      must(restored.status === 200, `restoring the pair score failed (${restored.status})`);
+      const after = (await call("GET", `/api/events/${event.id}/leaderboard`)).body;
+      const back = after.teams.find((t) => t.groupId === entry.pair.id);
+      check(back.gross === expectedGross, `pair gross after restore ${back.gross} should be ${expectedGross}`);
+      return;
+    }
     if (config.format === "TEXAS_SCRAMBLE") {
       const result = await call("POST", "/api/scramble", {
         body: {
@@ -726,17 +941,21 @@ async function runFormat(ctx, config) {
     must(changed.status === 200, `amending a score failed (${changed.status})`);
     const received = strokesReceived(entry.registration.playingHandicap, hole.strokeIndex);
     check(
-      changed.body.points === (config.format === "STABLEFORD" ? stablefordPoints(hole.par, hole.par + 3, received) : 0),
+      changed.body.points === (stablefordBoard(config.format) ? stablefordPoints(hole.par, hole.par + 3, received) : 0),
       "the amended score was not re-scored",
     );
     const board = (await call("GET", `/api/events/${event.id}/leaderboard`)).body;
     const row = board.standings.find((s) => s.playerId === entry.player.id);
     const onCard = row.holeResults.find((h) => h.holeNumber === hole.holeNumber);
     check(onCard.strokes === hole.par + 3, `the card still shows ${onCard.strokes} on hole 1`);
-    // Put the original score back so the rest of the run is unchanged.
-    await call("POST", "/api/scores", {
-      body: { eventId: event.id, playerId: entry.player.id, holeNumber: hole.holeNumber, strokes: hole.strokes, token: entry.group.token },
+    // Put the original score back so the rest of the run is unchanged. The
+    // original lives on the scorecard record - `hole` is the course hole and
+    // has no strokes - and the response is checked, because an ignored failure
+    // here poisons every later board comparison.
+    const restored = await call("POST", "/api/scores", {
+      body: { eventId: event.id, playerId: entry.player.id, holeNumber: hole.holeNumber, strokes: entry.holes[0].strokes, token: entry.group.token },
     });
+    must(restored.status === 200, `restoring the original score failed (${restored.status}): ${JSON.stringify(restored.body)}`);
   });
 
   await step("live updates arrive over SSE while a score lands", async () => {
@@ -748,17 +967,24 @@ async function runFormat(ctx, config) {
     // Re-post the value already on the card: every write bumps the revision, so
     // the live feed has to move even though the scores do not - which keeps the
     // cards the games below are checked against unchanged.
-    if (config.format === "TEXAS_SCRAMBLE") {
+    if (kind === "SCRAMBLE") {
       const card = scorecard.find((entry) => entry.group.id === group.id);
       const lastHole = card.holes.at(-1);
       await call("POST", "/api/scramble", {
         body: { eventId: event.id, groupId: group.id, holeNumber: lastHole.holeNumber, strokes: lastHole.strokes, token: group.token },
       });
+    } else if (kind === "PAIR") {
+      const games = (await call("GET", `/api/events/${event.id}/games`, { cookie: adminCookie })).body;
+      const pair = games.pairs?.[0];
+      const lastHole = scorecard.find((entry) => entry.pair.id === pair.id).holes.at(-1);
+      await call("POST", "/api/pair-scores", {
+        body: { eventId: event.id, pairId: pair.id, holeNumber: lastHole.holeNumber, strokes: lastHole.strokes, token: pair.token },
+      });
     } else {
       const card = scorecard.find((entry) => entry.player.id === target.player.id);
       const lastHole = card.holes.at(-1);
       await call("POST", "/api/scores", {
-        body: { eventId: event.id, playerId: target.player.id, holeNumber: lastHole.holeNumber, strokes: lastHole.strokes, token: group.token },
+        body: { eventId: event.id, playerId: target.player.id, holeNumber: lastHole.holeNumber, strokes: lastHole.strokes, round: lastHole.round ?? 1, token: group.token },
       });
     }
     await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -768,7 +994,7 @@ async function runFormat(ctx, config) {
     const last = watch.frames.at(-1);
     const first = watch.frames[0];
     check(last.revision > first.revision, `revision did not move (${first.revision} → ${last.revision})`);
-    if (config.format === "TEXAS_SCRAMBLE") {
+    if (teamCard) {
       check(last.games !== undefined || last.standings !== undefined, "the live frame carries no payload");
     } else {
       const row = last.standings.find((s) => s.playerId === target.player.id);
@@ -777,7 +1003,7 @@ async function runFormat(ctx, config) {
     note(`${watch.frames.length} live frames, revision ${first.revision} → ${last.revision}`);
   });
 
-  if (config.format !== "TEXAS_SCRAMBLE") {
+  if (!teamCard && rounds === 1) {
     await step("skins run over every hole and pay out correctly", async () => {
       const entered = scorecard.map((e) => e.player.id);
       const saved = await call("PUT", `/api/events/${event.id}/games`, {
@@ -904,9 +1130,13 @@ async function runFormat(ctx, config) {
         check(["A", "B", "HALVED"].includes(match.winner), `${match.name} has no winner: ${match.winner}`);
         check(match.points.A + match.points.B === 1, `${match.name} paid out ${match.points.A + match.points.B} points`);
         check(match.finished, `${match.name} is not marked finished after 18 holes`);
-        // A won match ends on the hole it is won on - that is what "9&8" means.
-        if (match.status !== "Halved" && match.status !== "1 UP") {
+        // A match won early says "9&8" (holes left). A match that runs to the
+        // last hole says "n UP" or "Halved" - "2 UP after 18" is a legal
+        // result, so only "&" statuses must be short of a full card.
+        if (match.status.includes("&")) {
           check(match.holesPlayed < 18, `${match.name} says ${match.status} but counted all 18 holes`);
+        } else {
+          check(match.holesPlayed === 18, `${match.name} says ${match.status} but counted ${match.holesPlayed} holes, expected 18`);
         }
       }
       check(
@@ -1005,14 +1235,19 @@ async function runFormat(ctx, config) {
     // 3. The master scorecard sees every card.
     const cards = await call("GET", `/api/events/${event.id}/cards`, { cookie: adminCookie });
     must(cards.status === 200, `the master scorecard returned ${cards.status}`);
-    const cardCount = config.format === "TEXAS_SCRAMBLE" ? cards.body.teams.length : cards.body.cards.length;
-    check(cardCount === (config.format === "TEXAS_SCRAMBLE" ? groups.length : FIELD_SIZE), `the master scorecard lists ${cardCount} cards`);
+    const cardCount = config.format === "TEXAS_SCRAMBLE"
+      ? cards.body.teams.length
+      : kind === "PAIR"
+        ? (cards.body.pairCards?.length ?? 0)
+        : cards.body.cards.length;
+    const expectedCards = config.format === "TEXAS_SCRAMBLE" ? groups.length : kind === "PAIR" ? scorecard.length : FIELD_SIZE;
+    check(cardCount === expectedCards, `the master scorecard lists ${cardCount} cards, expected ${expectedCards}`);
     const audit = await call("GET", `/api/events/${event.id}/audit`, { cookie: adminCookie });
     check(audit.status === 200, `the audit trail returned ${audit.status}`);
     check(Array.isArray(audit.body.amendments), "the audit trail has no amendments list");
 
-    // 4. Flights (individual formats only - a scramble is one team board).
-    if (config.format !== "TEXAS_SCRAMBLE") {
+    // 4. Flights (individual boards only - a team card is one board).
+    if (!teamCard) {
       const enabled = await call("PUT", `/api/events/${event.id}/games`, {
         cookie: adminCookie,
         body: { skins: "NET", skinsCarry: true, teamFormat: "FOURBBB", sideHoles: [], sponsors: [], matches: [], flights: 3 },
@@ -1025,11 +1260,11 @@ async function runFormat(ctx, config) {
         board.flights.map((f) => f.standings.length).join("/") === "7/6/6",
         `flights are ${board.flights.map((f) => f.standings.length).join("/")}, expected 7/6/6`,
       );
-      const key = config.format === "STABLEFORD" ? "points" : "netToPar";
+      const key = stablefordBoard(config.format) ? "points" : "netToPar";
       for (const flight of board.flights) {
         check(flight.standings[0].position === 1, `${flight.name} does not start at 1st`);
         const values = flight.standings.map((row) => row[key]);
-        const sorted = [...values].sort((a, b) => (config.format === "STABLEFORD" ? b - a : a - b));
+        const sorted = [...values].sort((a, b) => (stablefordBoard(config.format) ? b - a : a - b));
         check(values.join() === sorted.join(), `${flight.name} is out of order: ${values.join(", ")}`);
       }
       const handicapSpread = board.flights.map((f) => f.standings.map((row) => row.playingHandicap));
@@ -1061,7 +1296,7 @@ async function runFormat(ctx, config) {
     check(anonymous.groups.every((g) => g.players.length === 0), "the hidden board still lists who is in each group");
     check(anonymous.games.skins === null, "the hidden board still shows the skins");
     const asAdmin = (await call("GET", `/api/events/${event.id}/leaderboard`, { cookie: adminCookie })).body;
-    const adminRows = config.format === "TEXAS_SCRAMBLE" ? asAdmin.teams.length : asAdmin.standings.length;
+    const adminRows = asAdmin.teams ? asAdmin.teams.length : asAdmin.standings.length;
     check(!asAdmin.hidden && adminRows > 0, "the organiser could not see their own board");
     // Put it back so the rest of the run behaves normally.
     await call("PUT", `/api/events/${event.id}/games`, {
@@ -1109,7 +1344,7 @@ async function runFormat(ctx, config) {
     check(csv.status === 200, `export returned ${csv.status}`);
     const lines = csv.body.trim().split("\n");
     const board = (await call("GET", `/api/events/${event.id}/leaderboard`)).body;
-    const expectedRows = (config.format === "TEXAS_SCRAMBLE" ? board.teams.length : board.standings.length) + 1;
+    const expectedRows = (board.teams ? board.teams.length : board.standings.length) + 1;
     check(lines.length === expectedRows, `CSV has ${lines.length} lines, expected ${expectedRows}`);
     check(lines[0].includes("Position") && lines[0].includes("H18"), "the CSV header is missing a hole column");
     const anonymous = await call("GET", `/api/events/${event.id}/leaderboard`);
@@ -1128,7 +1363,19 @@ async function runFormat(ctx, config) {
     const member = (await bundle(adminCookie, event.id)).registrations.find((r) => r.registration.groupId === group.id);
     must(Boolean(member), "no player found in the first group to test the lock with");
 
-    if (config.format === "TEXAS_SCRAMBLE") {
+    if (kind === "PAIR") {
+      const games = (await call("GET", `/api/events/${event.id}/games`, { cookie: adminCookie })).body;
+      const pair = games.pairs?.[0];
+      const blocked = await call("POST", "/api/pair-scores", {
+        body: { eventId: event.id, pairId: pair.id, holeNumber: 3, strokes: 4, token: pair.token },
+      });
+      check(blocked.status === 409, `a player could still score a finished pair card (${blocked.status})`);
+      const fix = await call("POST", "/api/pair-scores", {
+        cookie: adminCookie,
+        body: { eventId: event.id, pairId: pair.id, holeNumber: 3, strokes: 4 },
+      });
+      check(fix.status === 200, `the admin could not correct a finished pair card (${fix.status})`);
+    } else if (config.format === "TEXAS_SCRAMBLE") {
       const blocked = await call("POST", "/api/scramble", {
         body: { eventId: event.id, groupId: group.id, holeNumber: 3, strokes: 4, token: group.token },
       });
@@ -1247,10 +1494,16 @@ async function main() {
       const client = createClient({ url: `file:${dbFile}` });
       const count = async (sql) => Number((await client.execute(sql)).rows[0].n);
       const scores = await count("select count(*) n from scores");
+      // Formats that write individual scores (a scramble and a pair card do
+      // not); a multi-round event writes its card once per round.
+      const individualFormats = FORMATS.filter((f) => {
+        const k = teamBoardKind(f.format);
+        return k === null || k === "DERIVED";
+      }).length;
       const scramble = await count("select count(*) n from scramble_scores");
       const audit = await count("select count(*) n from score_audit");
       const entries = await count("select count(*) n from side_game_entries");
-      check(scores >= 2 * FIELD_SIZE * 18, `only ${scores} individual hole scores stored`);
+      check(scores >= individualFormats * FIELD_SIZE * 18, `only ${scores} individual hole scores stored, expected at least ${individualFormats * FIELD_SIZE * 18}`);
       check(scramble >= 5 * 18, `only ${scramble} scramble holes stored`);
       check(entries >= 2, `only ${entries} side-game entries stored`);
       note(`${scores} hole scores, ${scramble} scramble holes, ${audit} audits, ${entries} side-game entries`);

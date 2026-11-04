@@ -29,6 +29,10 @@ export const EVENT_FORMATS = [
   "GROSS_STABLEFORD",
   "GROSS_STROKE_PLAY",
   "TEXAS_SCRAMBLE",
+  "FOURSOMES",
+  "GREENSOMES",
+  "SHAMBLE",
+  "BEST_2_OF_4",
   "FOUR_BETTER_BALL",
   "RYDER_CUP",
   "SKINS_NET",
@@ -57,6 +61,10 @@ export function boardFormat(format: string): BoardFormat {
     case "GROSS_STROKE_PLAY":
     case "SKINS_NET":
     case "SKINS_GROSS":
+    // A shamble and a best-two play their own balls in: the individual cards
+    // are real net cards, so that is how they rank beside the team board.
+    case "SHAMBLE":
+    case "BEST_2_OF_4":
       return "STROKE_PLAY";
     default:
       return "STABLEFORD";
@@ -66,6 +74,48 @@ export function boardFormat(format: string): BoardFormat {
 /** Does the main table show Stableford points (rather than net to par)? */
 export function isStablefordBoard(format: string): boolean {
   return boardFormat(format) === "STABLEFORD";
+}
+
+/**
+ * How a format produces its competition board:
+ *
+ *  - `SCRAMBLE`  one card per tee group, entered against the group's token;
+ *  - `PAIR`      one card per pair (foursomes / greensomes), alternate shot;
+ *  - `DERIVED`   players card their own scores and the team board is computed
+ *                from them (shamble: best net a hole; best two of four: two);
+ *  - `null`      an individual competition - no team board at all.
+ *
+ * The season loader reads `board.teams`, so anything that returns teams flows
+ * into a society's running totals without the seasons code knowing its name.
+ */
+export type TeamBoardKind = "SCRAMBLE" | "PAIR" | "DERIVED";
+
+export function teamBoardKind(format: string): TeamBoardKind | null {
+  switch (format) {
+    case "TEXAS_SCRAMBLE":
+      return "SCRAMBLE";
+    case "FOURSOMES":
+    case "GREENSOMES":
+      return "PAIR";
+    case "SHAMBLE":
+    case "BEST_2_OF_4":
+      return "DERIVED";
+    default:
+      return null;
+  }
+}
+
+/** Every format whose competition is played by a team. */
+export function isTeamFormat(format: string): boolean {
+  return teamBoardKind(format) !== null;
+}
+
+/**
+ * Formats scored as one card per team cannot be played twice: there is no
+ * per-player card to repeat. Everything else supports `rounds` 1-4.
+ */
+export function supportsRounds(format: string): boolean {
+  return teamBoardKind(format) !== "SCRAMBLE" && teamBoardKind(format) !== "PAIR";
 }
 
 /** Formats played with no handicap allowance at all - what "gross" means. */
@@ -106,6 +156,14 @@ export function formatLabel(format: string): string {
       return "Stroke play (gross)";
     case "TEXAS_SCRAMBLE":
       return "Texas scramble";
+    case "FOURSOMES":
+      return "Foursomes";
+    case "GREENSOMES":
+      return "Greensomes";
+    case "SHAMBLE":
+      return "Shamble";
+    case "BEST_2_OF_4":
+      return "Best two of four";
     case "FOUR_BETTER_BALL":
       return "Better-ball pairs (4BBB)";
     case "RYDER_CUP":

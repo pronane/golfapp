@@ -32,6 +32,7 @@ export default async function NewEventPage({
         date: previous.date,
         startTime: previous.startTime,
         format: previous.format as EventFormat,
+        rounds: previous.rounds ?? 1,
         handicapAllowance: previous.handicapAllowance,
         maxPlayers: previous.maxPlayers,
         courseId: previous.courseId,

@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS events (
   course_id TEXT,
   course_name TEXT,
   format TEXT NOT NULL DEFAULT 'STABLEFORD',
+  rounds INTEGER NOT NULL DEFAULT 1,
   handicap_allowance INTEGER NOT NULL DEFAULT 95,
   status TEXT NOT NULL DEFAULT 'DRAFT',
   max_players INTEGER NOT NULL DEFAULT 72,
@@ -138,17 +139,19 @@ CREATE TABLE IF NOT EXISTS scores (
   hole_number INTEGER NOT NULL,
   strokes INTEGER NOT NULL,
   points INTEGER NOT NULL DEFAULT 0,
+  round INTEGER NOT NULL DEFAULT 1,
   recorded_by TEXT,
   created_at TEXT NOT NULL DEFAULT (current_timestamp),
   updated_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS score_unique ON scores (event_id, player_id, hole_number);
+CREATE UNIQUE INDEX IF NOT EXISTS score_round_unique ON scores (event_id, player_id, hole_number, round);
 
 CREATE TABLE IF NOT EXISTS score_audit (
   id TEXT PRIMARY KEY,
   event_id TEXT NOT NULL,
   player_id TEXT NOT NULL,
   hole_number INTEGER NOT NULL,
+  round INTEGER NOT NULL DEFAULT 1,
   old_strokes INTEGER,
   new_strokes INTEGER NOT NULL,
   changed_by TEXT,
@@ -208,7 +211,8 @@ CREATE TABLE IF NOT EXISTS event_pairs (
   name TEXT NOT NULL,
   player_a TEXT NOT NULL,
   player_b TEXT NOT NULL,
-  sort_order INTEGER NOT NULL DEFAULT 0
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  token TEXT
 );
 CREATE INDEX IF NOT EXISTS event_pairs_event_idx ON event_pairs (event_id);
 
@@ -269,6 +273,31 @@ CREATE TABLE IF NOT EXISTS scramble_audit (
   changed_at TEXT NOT NULL DEFAULT (current_timestamp)
 );
 CREATE INDEX IF NOT EXISTS scramble_audit_event_idx ON scramble_audit (event_id);
+
+-- Foursomes / greensomes: one card per pair (the team).
+CREATE TABLE IF NOT EXISTS pair_scores (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+  pair_id TEXT NOT NULL,
+  hole_number INTEGER NOT NULL,
+  strokes INTEGER NOT NULL,
+  recorded_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS pair_score_unique ON pair_scores (event_id, pair_id, hole_number);
+CREATE INDEX IF NOT EXISTS pair_score_pair_idx ON pair_scores (event_id, pair_id);
+
+CREATE TABLE IF NOT EXISTS pair_audit (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  pair_id TEXT NOT NULL,
+  hole_number INTEGER NOT NULL,
+  old_strokes INTEGER,
+  new_strokes INTEGER NOT NULL,
+  changed_by TEXT,
+  changed_at TEXT NOT NULL DEFAULT (current_timestamp)
+);
+CREATE INDEX IF NOT EXISTS pair_audit_event_idx ON pair_audit (event_id);
 
 -- A society is the club that runs the golf days: its own fixture list, roster
 -- and seasons. Everything is optional - a one-off event needs no society.

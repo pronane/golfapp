@@ -6,11 +6,10 @@ import { ApiError, getEventAccess, json, parseJson, route } from "@/lib/http";
 import { bumpRevision, getEventById } from "@/lib/events";
 import { newId } from "@/lib/ids";
 import { stablefordPoints } from "@/lib/scoring";
-import { isScrambleFormat } from "@/lib/scramble";
 import { scoreWriteRule } from "@/lib/status";
 import { strokesReceived } from "@/lib/handicap";
 import { scoreSchema, validate } from "@/lib/validate";
-import { isStablefordBoard } from "@/lib/eventFormats";
+import { isStablefordBoard, teamBoardKind } from "@/lib/eventFormats";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +27,18 @@ export const POST = route(async (request: Request) => {
   if (event.status === "DRAFT" || event.status === "CANCELLED") {
     throw new ApiError(409, "Scoring is not open for this event", "event_closed");
   }
-  // A Texas scramble is one card per team, not one per player: accepting
-  // individual scores here would silently post numbers the board never shows.
-  if (isScrambleFormat(event.format)) {
+  // A scramble or a pair card is one card per team, not one per player:
+  // accepting individual scores here would silently post numbers the board
+  // never shows. (A shamble DOES card everybody - it derives its team board
+  // from these scores - so it stays open.)
+  const kind = teamBoardKind(event.format);
+  if (kind === "SCRAMBLE" || kind === "PAIR") {
     throw new ApiError(409, "This golf day is scored as a team card", "not_individual_format");
+  }
+  // Which round of a multi-round event this stroke belongs to.
+  const round = body.round ?? 1;
+  if (round > (event.rounds ?? 1)) {
+    throw new ApiError(400, `This event has ${event.rounds ?? 1} round(s)`, "bad_round");
   }
 
   const [registration] = await db
@@ -85,6 +92,7 @@ export const POST = route(async (request: Request) => {
         eq(scores.eventId, body.eventId),
         eq(scores.playerId, body.playerId),
         eq(scores.holeNumber, body.holeNumber),
+        eq(scores.round, round),
       ),
     )
     .limit(1);
@@ -96,6 +104,7 @@ export const POST = route(async (request: Request) => {
         eventId: body.eventId,
         playerId: body.playerId,
         holeNumber: body.holeNumber,
+        round,
         oldStrokes: existing.strokes,
         newStrokes: body.strokes,
         changedBy: user?.id ?? via,
@@ -112,7 +121,7 @@ export const POST = route(async (request: Request) => {
       .where(eq(scores.id, existing.id));
   } else {
     // Two phones in the same group often enter the same hole at once. Without
-    // the upsert the second insert hits score_unique and returns a 500.
+    // the upsert the second insert hits score_round_unique and returns a 500.
     await db
       .insert(scores)
       .values({
@@ -120,12 +129,13 @@ export const POST = route(async (request: Request) => {
         eventId: body.eventId,
         playerId: body.playerId,
         holeNumber: body.holeNumber,
+        round,
         strokes: body.strokes,
         points,
         recordedBy: user?.id ?? via,
       })
       .onConflictDoUpdate({
-        target: [scores.eventId, scores.playerId, scores.holeNumber],
+        target: [scores.eventId, scores.playerId, scores.holeNumber, scores.round],
         set: { strokes: body.strokes, points, updatedAt: new Date().toISOString(), recordedBy: user?.id ?? via },
       });
   }

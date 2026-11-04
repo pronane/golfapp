@@ -6,10 +6,19 @@ import { getEventBundle, getRevision, groupTokenEventId, isRegisteredPlayer } fr
 import { getEventAccess } from "./http";
 import { rankStandings, summariseRound, type Standing } from "./scoring";
 import { isScrambleFormat, type ScrambleStanding } from "./scramble";
-import { getGroupScrambleCard, loadScrambleTeams, type GroupScrambleCard } from "./scrambleScores";
+import {
+  getGroupScrambleCard,
+  getPairCard,
+  loadPairTeams,
+  loadScrambleTeams,
+  type GroupScrambleCard,
+  type PairCard,
+} from "./scrambleScores";
+import { rankDerivedTeams } from "./derivedTeams";
 import { buildGames, getGameSettings, listSideEntries, type GamesPayload, type SideHole } from "./games";
 import { bandPlayers, splitIntoFlights } from "./flights";
-import { boardFormat } from "./eventFormats";
+import { boardFormat, teamBoardKind } from "./eventFormats";
+import { listPairs } from "./games";
 
 export type PublicEvent = {
   id: string;
@@ -21,6 +30,8 @@ export type PublicEvent = {
   format: string;
   status: string;
   handicapAllowance: number;
+  /** How many times the card is played (1 = a normal day). */
+  rounds: number;
 };
 
 export type LeaderboardGroup = {
@@ -63,6 +74,7 @@ export function toPublicEvent(event: {
   format: string;
   status: string;
   handicapAllowance: number;
+  rounds?: number;
 }): PublicEvent {
   return {
     id: event.id,
@@ -74,6 +86,7 @@ export function toPublicEvent(event: {
     format: event.format,
     status: event.status,
     handicapAllowance: event.handicapAllowance,
+    rounds: event.rounds ?? 1,
   };
 }
 
@@ -113,15 +126,17 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
     .where(and(eq(scores.eventId, eventId)));
 
   const groupLookup = new Map(groupRows.map((g) => [g.id, g]));
-  const scoresByPlayer = new Map<string, { holeNumber: number; strokes: number }[]>();
+  const scoresByPlayer = new Map<string, { holeNumber: number; strokes: number; round?: number }[]>();
   for (const row of scoreRows) {
     const list = scoresByPlayer.get(row.playerId) ?? [];
-    list.push({ holeNumber: row.holeNumber, strokes: row.strokes });
+    list.push({ holeNumber: row.holeNumber, strokes: row.strokes, round: row.round ?? 1 });
     scoresByPlayer.set(row.playerId, list);
   }
 
+  const rounds = event.rounds ?? 1;
+  const holesInCard = (holes.length || 18) * rounds;
   const holeInfo = holes.map((h) => ({ holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex }));
-  const par = holeInfo.reduce((sum, h) => sum + h.par, 0);
+  const par = holeInfo.reduce((sum, h) => sum + h.par, 0) * rounds;
 
   const rows = registrations
     .filter((r) => r.registration.status === "REGISTERED")
@@ -146,31 +161,53 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
       };
     });
 
-  const scramble = isScrambleFormat(event.format);
-  const teams = scramble
-    ? await loadScrambleTeams(
-        eventId,
-        holeInfo,
-        groupRows.map((g) => ({ id: g.id, name: g.name, teeTime: g.teeTime })),
-        registrations
-          .filter((r) => r.registration.status === "REGISTERED")
-          .map(({ registration, player }) => ({
-            playerId: player.id,
-            name: player.name,
-            courseHandicap: registration.courseHandicap,
-            groupId: registration.groupId ?? null,
-          })),
-      )
-    : null;
+  const teamKind = teamBoardKind(event.format);
+  const scramble = teamKind === "SCRAMBLE";
+  const activeRegistrations = registrations
+    .filter((r) => r.registration.status === "REGISTERED")
+    .map(({ registration, player }) => ({
+      playerId: player.id,
+      name: player.name,
+      courseHandicap: registration.courseHandicap,
+      playingHandicap: registration.playingHandicap,
+      groupId: registration.groupId ?? null,
+    }));
+  const groupList = groupRows.map((g) => ({ id: g.id, name: g.name, teeTime: g.teeTime }));
+  const teams =
+    teamKind === "SCRAMBLE"
+      ? await loadScrambleTeams(eventId, holeInfo, groupList, activeRegistrations)
+      : teamKind === "PAIR"
+        ? await loadPairTeams(
+            eventId,
+            holeInfo,
+            (await listPairs(eventId)).map((p) => ({ id: p.id, name: p.name, playerA: p.playerA, playerB: p.playerB })),
+            activeRegistrations,
+          )
+        : teamKind === "DERIVED"
+          ? rankDerivedTeams(
+              event.format === "BEST_2_OF_4" ? "BEST_2_OF_4" : "SHAMBLE",
+              holeInfo,
+              groupList,
+              rows.map((row) => {
+                const reg = activeRegistrations.find((r) => r.playerId === row.playerId);
+                return {
+                  playerId: row.playerId,
+                  name: row.playerName,
+                  courseHandicap: reg?.courseHandicap ?? 0,
+                  groupId: row.groupId,
+                  holeResults: row.holeResults,
+                  thru: row.thru,
+                };
+              }),
+            )
+          : null;
 
-  // A scramble has no individual card: the team is the competitor.
-  const standings = scramble
-    ? []
-    : rankStandings(
-        rows,
-        boardFormat(event.format),
-        holeInfo.length || 18,
-      );
+  // A scramble or a pair card has no individual card: the team is the
+  // competitor. A shamble cards everybody AND computes a team board.
+  const standings =
+    teamKind === null || teamKind === "DERIVED"
+      ? rankStandings(rows, boardFormat(event.format), holesInCard)
+      : [];
 
   const groupBoard: LeaderboardGroup[] = groupRows.map((g) => {
     const members = standings.filter((s) => s.groupId === g.id);
@@ -181,14 +218,23 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
       teeTime: g.teeTime,
       // NB: never put g.token here. This payload is public (live page, API and
       // SSE stream) and the token is the password for the group's scorecard.
-      players: team ? team.members.map((m) => m.name) : members.map((m) => m.playerName),
+      // A pair-card format has no individual standings and pairs are not
+      // groups - fall back to the registrations so the tee sheet still names
+      // who is playing before anybody has carded a hole.
+      players: team
+        ? team.members.map((m) => m.name)
+        : members.length > 0
+          ? members.map((m) => m.playerName)
+          : registrations
+              .filter((r) => r.registration.status === "REGISTERED" && r.registration.groupId === g.id)
+              .map((r) => r.player.name),
       points: team ? team.points : members.reduce((sum, m) => sum + m.points, 0),
       holesPlayed: team ? team.thru : members.reduce((sum, m) => sum + m.thru, 0),
     };
   });
 
-  const leader = scramble
-    ? teams?.find((t) => t.thru > 0)?.groupName ?? null
+  const leader = teams
+    ? (teams.find((t) => t.thru > 0)?.groupName ?? standings.find((s) => s.thru > 0)?.playerName ?? null)
     : standings.find((s) => s.thru > 0)?.playerName ?? null;
   const games = await buildGames(
     eventId,
@@ -209,7 +255,7 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
           index: flight.index,
           // Re-rank inside the flight: a flight member is 1st in their division,
           // not 14th overall.
-          standings: rankStandings(flight.rows, rankMode, holeInfo.length || 18),
+          standings: rankStandings(flight.rows, rankMode, holesInCard),
         }))
       : null;
 
@@ -225,9 +271,9 @@ export async function buildLeaderboard(eventId: string): Promise<LeaderboardPayl
     groups: groupBoard,
     games,
     stats: {
-      registered: scramble ? rows.length : standings.length,
-      scoresEntered: scramble ? (teams ?? []).reduce((sum, t) => sum + t.thru, 0) : scoreRows.length,
-      holesInCard: holeInfo.length,
+      registered: teamKind ? rows.length : standings.length,
+      scoresEntered: teams && teamKind !== "DERIVED" ? teams.reduce((sum, t) => sum + t.thru, 0) : scoreRows.length,
+      holesInCard,
       leader,
     },
   };
@@ -300,11 +346,17 @@ export type GroupScoreboard = {
     format: string;
     status: string;
     handicapAllowance: number;
+    /** How many times the card is played (1 = a normal day). */
+    rounds: number;
   };
   group: { id: string; name: string; teeTime: string | null; token: string };
   holes: { holeNumber: number; par: number; strokeIndex: number }[];
   /** Texas scramble team card, when the event is played as a scramble */
   scramble: GroupScrambleCard | null;
+  /** Foursomes / greensomes: the pair cards this four-ball contains. */
+  pairCards: PairCard[] | null;
+  /** Which round the per-hole `scores` records below belong to (1 if single). */
+  round: number;
   /** nearest-the-pin / longest-drive holes, and this group's measurements on them */
   sideHoles: SideHole[];
   sideEntries: { kind: string; holeNumber: number; playerId: string; distance: number }[];
@@ -324,12 +376,15 @@ export type GroupScoreboard = {
 };
 
 /** Data for the group score-entry screen (and its live mini leaderboard). */
-export async function getGroupScoreboard(token: string): Promise<GroupScoreboard | null> {
+export async function getGroupScoreboard(token: string, round = 1): Promise<GroupScoreboard | null> {
   const [group] = await db.select().from(groups).where(eq(groups.token, token)).limit(1);
   if (!group) return null;
   const bundle = await getEventBundle(group.eventId);
   if (!bundle) return null;
-  const scoreRows = await db.select().from(scores).where(eq(scores.eventId, group.eventId));
+  const allScoreRows = await db.select().from(scores).where(eq(scores.eventId, group.eventId));
+  // The per-hole record shows ONE round (the tab the scorer picked); totals
+  // below always aggregate every round played so far.
+  const scoreRows = (bundle.event.rounds ?? 1) > 1 ? allScoreRows.filter((r) => (r.round ?? 1) === round) : allScoreRows;
 
   const members = bundle.registrations.filter(
     (r) => r.registration.groupId === group.id && r.registration.status !== "WITHDRAWN",
@@ -337,9 +392,10 @@ export async function getGroupScoreboard(token: string): Promise<GroupScoreboard
   const holeInfo = bundle.holes.map((h) => ({ holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex }));
 
   const playersPayload = members.map(({ registration, player }) => {
-    const own = scoreRows.filter((s) => s.playerId === player.id);
+    // Totals aggregate every round; the per-hole record shows this round only.
+    const own = allScoreRows.filter((s) => s.playerId === player.id);
     const record: Record<number, number> = {};
-    for (const s of own) record[s.holeNumber] = s.strokes;
+    for (const s of scoreRows.filter((row) => row.playerId === player.id)) record[s.holeNumber] = s.strokes;
     const total = summariseRound(holeInfo, own, registration.playingHandicap);
     return {
       id: player.id,
@@ -360,12 +416,25 @@ export async function getGroupScoreboard(token: string): Promise<GroupScoreboard
   const scrambleCard = isScrambleFormat(bundle.event.format)
     ? await getGroupScrambleCard(group.eventId, group.id, holeInfo)
     : null;
+  // Foursomes / greensomes: every pair drawn out of this four-ball gets its
+  // own card here, so one group link carries both pair cards.
+  let pairCards: PairCard[] | null = null;
+  if (teamBoardKind(bundle.event.format) === "PAIR") {
+    const memberIds = new Set(members.map((m) => m.player.id));
+    const pairs = (await listPairs(group.eventId)).filter(
+      (p) => memberIds.has(p.playerA) && memberIds.has(p.playerB),
+    );
+    const cards = await Promise.all(pairs.map((p) => getPairCard(group.eventId, p.id, holeInfo)));
+    pairCards = cards.filter((c): c is PairCard => c !== null);
+  }
 
   return {
     event: toPublicEvent(bundle.event),
     group: { id: group.id, name: group.name, teeTime: group.teeTime, token: group.token },
     holes: holeInfo,
     scramble: scrambleCard,
+    pairCards,
+    round,
     sideHoles: settings.sideHoles,
     sideEntries: entryRows
       .filter((e) => memberIds.has(e.playerId))

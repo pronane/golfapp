@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { client } from "./client";
-import { ADDED_COLUMNS, ADDED_INDEXES, reconcileColumns } from "./reconcile";
+import { ADDED_COLUMNS, ADDED_INDEXES, LEGACY_INDEX_DROPS, reconcileColumns } from "./reconcile";
 
 /**
  * Create the tables (idempotent) and then bring an existing database up to date.
@@ -56,6 +56,12 @@ export async function pushSchemaDetailed(): Promise<PushResult> {
     } catch (err) {
       if (!/already exists|no such column/i.test(String(err))) throw err;
     }
+  }
+
+  // Last: indexes the schema replaced (e.g. the old three-column score key).
+  // The wider index exists by now, so the uniqueness guard never lapses.
+  for (const statement of LEGACY_INDEX_DROPS) {
+    await client.execute(statement);
   }
 
   return { statements: statements.length, added: applied };

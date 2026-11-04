@@ -58,12 +58,28 @@ export const ADDED_COLUMNS: AddedColumn[] = [
   // flights and the hide-the-board anti-cheat toggle
   column("event_settings", "flights", "INTEGER NOT NULL DEFAULT 0"),
   column("event_settings", "hide_board", "INTEGER NOT NULL DEFAULT 0"),
+  // multi-round events (two-day medals)
+  column("events", "rounds", "INTEGER NOT NULL DEFAULT 1"),
+  column("scores", "round", "INTEGER NOT NULL DEFAULT 1"),
+  column("score_audit", "round", "INTEGER NOT NULL DEFAULT 1"),
+  // pair scorecards for foursomes / greensomes
+  column("event_pairs", "token", "TEXT"),
 ];
 
 /** Indexes added after a table shipped. `IF NOT EXISTS` makes these idempotent. */
 export const ADDED_INDEXES: string[] = [
   "CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_unique ON users (oauth_provider, oauth_subject)",
+  // scores.round joined the key when multi-round events arrived; the old
+  // three-column index would reject round 2 of hole 1.
+  "CREATE UNIQUE INDEX IF NOT EXISTS score_round_unique ON scores (event_id, player_id, hole_number, round)",
 ];
+
+/**
+ * Indexes that were replaced by a wider one. Dropped after the replacement
+ * exists (push runs these last) - dropping an index never touches data, and
+ * leaving the old one in place would block the very writes the new one allows.
+ */
+export const LEGACY_INDEX_DROPS: string[] = ["DROP INDEX IF EXISTS score_unique"];
 
 export type ReconcileResult = {
   /** Columns that were genuinely absent and have just been added. */
