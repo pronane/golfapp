@@ -33,6 +33,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
+  const [queueWarning, setQueueWarning] = useState(false);
   const [sideValue, setSideValue] = useState("");
   const [sideMessage, setSideMessage] = useState<string | null>(null);
 
@@ -47,7 +48,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
     setCard({
       ...fresh,
       players: fresh.players.map((p) => {
-        const mine = queued.filter((q) => q.playerId === p.id);
+        const mine = queued.filter((q) => q.playerId === p.id && (q.round ?? 1) === round);
         if (mine.length === 0) return p;
         const scores = { ...p.scores };
         for (const q of mine) scores[q.holeNumber] = q.strokes;
@@ -63,6 +64,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
     }
     const result = await flushQueue(token);
     setPending(result.left);
+    if (result.left === 0) setQueueWarning(false);
     if (result.rejected.length) setError(`Not saved: ${result.rejected.join("; ")}`);
     if (result.sent > 0 || result.rejected.length > 0) await refreshCard();
   }, [token, refreshCard]);
@@ -115,8 +117,10 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
       });
     } catch {
       // No signal: keep the score on the phone and send it later.
-      enqueue(payload);
+      const persisted = enqueue(payload);
       setPending(readQueue(token).length);
+      setQueueWarning(!persisted);
+      if (!persisted) setError("Offline score is saved only while this page stays open. Keep it open until it syncs.");
       setSaving(null);
       const nextHole = card.holes.find(
         (h) => h.holeNumber > holeNumber && !(card.players.find((p) => p.id === playerId)?.scores[h.holeNumber]),
@@ -211,7 +215,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
               <span className="pill hero-chip">{scored}/{totalHoles} holes in</span>
               {pending > 0 && (
                 <span role="status" className="pill bg-amber-100 text-amber-800 ring-amber-300">
-                  {pending} saved on this phone · will sync
+                  {pending} {queueWarning ? "saved in this page only · keep it open" : "saved on this phone · will sync"}
                 </span>
               )}
               <Link href={`/live/${card.event.slug}`} className="btn-secondary btn-sm">

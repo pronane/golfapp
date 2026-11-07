@@ -29,6 +29,9 @@ golfday/
 secretary, from creating the society to the live board. The rest of this README is for
 whoever deploys and maintains the app.
 
+For an evidence-based feature comparison, prioritized checklist, and switching
+playbook, see [`docs/COMPETITIVE-ROADMAP.md`](docs/COMPETITIVE-ROADMAP.md).
+
 ---
 
 ## Quick start
@@ -81,8 +84,8 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # 216 unit tests
-npm run e2e        # the browser click-through (own database, own server)
+npm test           # unit tests, including offline score sync and multi-round queue cases
+npm run e2e        # browser click-through; also run in CI (own database, own server)
 npm run e2e:friends # the friends' day: no society, hand-typed course, cash entry
 npm run e2e:formats # all 14 walks (every format + a two-day medal), 19 players, 18,103 checks, no browser
 npm run e2e:seasons # a season's running totals across formats, then the winner: 985 checks

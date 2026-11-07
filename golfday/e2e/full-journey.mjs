@@ -352,8 +352,15 @@ async function journey() {
     await page.getByRole("link", { name: /open scorecard/i }).first().click();
     await page.waitForURL(/\/score\//, { timeout: 30_000 });
     await seesText(page, "Live scorecard", "scorecard");
+    const firstScore = page.getByLabel("Score 4 on hole 1");
+    await page.route("**/api/scores", (route) => route.abort());
+    await firstScore.click();
+    const pendingScores = page.locator('[role="status"]').filter({ hasText: /saved on this phone/ });
+    await pendingScores.waitFor({ state: "visible", timeout: 10_000 });
+    await page.unroute("**/api/scores");
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await pendingScores.waitFor({ state: "detached", timeout: 10_000 });
     for (const [hole, strokes] of [
-      [1, 4],
       [2, 5],
       [3, 3],
       [4, 4],

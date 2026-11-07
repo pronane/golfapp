@@ -22,6 +22,8 @@ jobs:
           cache: npm
           cache-dependency-path: golfday/package-lock.json
       - run: npm ci
+      - name: Install Chromium for the browser journey
+        run: npx playwright-core install --with-deps chromium
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Unit tests
@@ -30,6 +32,8 @@ jobs:
         run: npm run db:reset
       - name: Build
         run: npm run build
+      - name: Full golf-day browser journey
+        run: npm run e2e
       # An app newer than its database is the failure that reached production
       # once: boot, then `no such column` on every page. This boots the real
       # build against a database that predates the columns and expects it to
