@@ -32,6 +32,9 @@ whoever deploys and maintains the app.
 For an evidence-based feature comparison, prioritized checklist, and switching
 playbook, see [`docs/COMPETITIVE-ROADMAP.md`](docs/COMPETITIVE-ROADMAP.md).
 
+For the email copy generator and shared Away/GolfDay outreach workflow, see
+[`docs/OUTREACH.md`](docs/OUTREACH.md).
+
 ---
 
 ## Quick start

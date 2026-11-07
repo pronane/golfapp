@@ -180,3 +180,13 @@ person pressing send where they can't:
 - It does not store recipients — put the name in when you run it.
 - It does not know a club's actual competitor prices; it knows published ones,
   dated, and says so.
+
+## Scheduled prospecting and reviewed delivery
+
+For the shared local tool that discovers Away hostels and mapped GolfDay clubs,
+prepares product-specific drafts, and attaches PDF fact sheets, use the
+[Away + GolfDay outreach desk](https://github.com/pronane/hostelawaygo/tree/master/apps/outreach).
+Its Windows Task Scheduler task prepares drafts only. Each message still needs
+to be reviewed and approved before sending. Current GolfDay discovery uses
+OpenStreetMap; searching the wider web for society directories needs a
+separately chosen search provider.
