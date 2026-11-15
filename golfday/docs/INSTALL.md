@@ -122,8 +122,9 @@ order, so a locked-down machine with only Edge still works.
 ## What has been verified, honestly
 
 * The Unix installer, `install/setup.mjs`, the launchers and the full end-to-end journey
-  were run end to end on Linux (Ubuntu-class, x86-64) with **all 15 steps passing**,
-  against both the development and the production server.
+  were previously run on Linux (Ubuntu-class, x86-64) against both the development and
+  production server. The journey now also checks CSV imports, event copying and handicap
+  scoring; run `npm run e2e` to verify the current version on your machine.
 * The **Windows** PowerShell installer follows the identical steps and delegates everything
   after Node detection to the same cross-platform `install/setup.mjs`, but it has not been
   executed on a Windows machine here. If it trips, the error message names the step, and

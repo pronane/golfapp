@@ -37,7 +37,7 @@ export const GET = route(async (request: Request, ctx: Ctx) => {
     access: access ? { role: access.role, isAdmin: access.isAdmin } : null,
     isRegistered,
     revision: bundle.revision,
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 });
 
 export const PATCH = route(async (request: Request, ctx: Ctx) => {
@@ -76,7 +76,7 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
   if (Object.keys(updates).length > 0) {
     await db.update(events).set(updates).where(eq(events.id, id));
   }
-  if (body.handicapAllowance !== undefined) await recalculateHandicaps(id);
+  if (body.handicapAllowance !== undefined || body.courseId !== undefined) await recalculateHandicaps(id);
   await bumpRevision(id);
   return json({ ok: true });
 });

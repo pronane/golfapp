@@ -343,3 +343,35 @@ of it (`POST /api/events/[id]/payments/refund`, organiser only):
 
 Refunds made *in the Stripe dashboard* do not flow back into GolfDay (that would need a
 webhook endpoint); use the console, or record the manual equivalent.
+
+---
+
+## 4. CSV imports and event copies
+
+The organiser's **Import CSV** page accepts player, course and event exports. Golf Genius,
+ClubV1, PlayThru and other systems can be used by exporting their data to CSV and pasting
+or uploading it; GolfDay does not log in to competitor websites or scrape private pages.
+Common player headings such as `Player`, `Member`, `HI`, `Handicap Index`, `CDH Number`,
+`GHIN Number`, `Club` and `Email Address` are mapped to the GolfDay player fields.
+
+The portable course format has one row per hole, one complete 18-hole card per course and
+one tee per course:
+
+```csv
+Course Name,Club,Tee,Slope,Rating,Hole,Par,Stroke Index,Yardage
+Park Course,Park Club,White,122,71.4,1,4,8,410
+```
+
+Event imports have one row per event. `Event Name`, `Date`, and `Format` are required;
+dates may be `YYYY-MM-DD` or UK `DD/MM/YYYY`. `Course` must match a course already in the
+library when provided. Accepted formats include Stableford, Stroke Play/Medal, and Texas
+Scramble. Imported events are drafts so the organiser can review and edit them before
+publishing.
+
+From an event console, **Copy to another day** creates an editable draft with the event
+settings, course-card snapshot and active entrants. Each entrant's handicap index, course
+handicap and playing handicap are copied from their registration in the source event, so
+changes to a player's current handicap do not silently alter the copied round. Scores, tee
+groups, games, payments and other event results are not copied. The full integration suite
+verifies handicap scoring for Stableford, net stroke play and Texas Scramble, including a
+copied event.

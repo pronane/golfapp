@@ -67,6 +67,7 @@ type Props = {
   groups: ConsoleGroup[];
   admins: ConsoleAdmin[];
   isOwner: boolean;
+  canEdit: boolean;
   society?: ConsoleSociety | null;
 };
 
@@ -86,6 +87,13 @@ export function EventConsole(props: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyForm, setCopyForm] = useState({ name: "", date: "" });
+  const [copySummary, setCopySummary] = useState<{
+    eventId: string;
+    copiedPlayers: number;
+    skipped: { name: string; reason: string }[];
+  } | null>(null);
 
   const [form, setForm] = useState({
     name: props.event.name,
@@ -156,6 +164,14 @@ export function EventConsole(props: Props) {
 
   const registeredIds = new Set(props.registrations.map((r) => r.player.id));
   const unassigned = props.registrations.filter((r) => !r.registration.groupId).length;
+  function openCopyForm() {
+    const date = new Date(`${props.event.date}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + 1);
+    setCopyForm({ name: `${props.event.name} (copy)`.slice(0, 120), date: date.toISOString().slice(0, 10) });
+    setCopyOpen(true);
+    setCopySummary(null);
+    setError(null);
+  }
 
   return (
     <div className="space-y-5">
@@ -173,6 +189,15 @@ export function EventConsole(props: Props) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {props.canEdit && (
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={openCopyForm}
+              >
+                Copy to another day
+              </button>
+            )}
             <Link href={`/events/${props.event.slug}`} className="btn-secondary btn-sm">Event page</Link>
             <Link href={`/live/${props.event.slug}`} className="btn-sand btn-sm">Live board</Link>
           </div>
@@ -189,6 +214,64 @@ export function EventConsole(props: Props) {
           ))}
         </div>
       </header>
+
+      {copyOpen && (
+        <section className="card card-pad space-y-3" aria-label="Copy event">
+          <div>
+            <h2 className="text-[15px] font-bold">Copy to another day</h2>
+            <p className="mt-1 text-[12.5px] text-ink/55">
+              Event settings, the course card, entrants and their current handicaps are copied. Scores, groups and side games start fresh.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="copy-name">New event name</label>
+              <input id="copy-name" className="input" value={copyForm.name} onChange={(e) => setCopyForm({ ...copyForm, name: e.target.value })} />
+            </div>
+            <div>
+              <label className="label" htmlFor="copy-date">New date</label>
+              <input id="copy-date" type="date" className="input" value={copyForm.date} onChange={(e) => setCopyForm({ ...copyForm, date: e.target.value })} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary btn-sm" disabled={busy} onClick={() => setCopyOpen(false)}>Cancel</button>
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              disabled={busy || copyForm.name.trim().length < 2 || !copyForm.date || copyForm.date === props.event.date}
+              onClick={async () => {
+                const result = await call(`/api/events/${props.event.id}/copy`, "POST", copyForm);
+                if (!result?.event?.id) return;
+                if (result.event.skipped?.length) {
+                  setCopyOpen(false);
+                  setCopySummary({
+                    eventId: result.event.id,
+                    copiedPlayers: result.event.copiedPlayers,
+                    skipped: result.event.skipped,
+                  });
+                  flash("The event was copied, but some players could not be added");
+                  return;
+                }
+                router.push(`/admin/events/${result.event.id}`);
+              }}
+            >
+              Copy event
+            </button>
+          </div>
+        </section>
+      )}
+
+      {copySummary && (
+        <section className="card card-pad space-y-2" role="status">
+          <p className="text-[13px] font-semibold">
+            Draft created. {copySummary.copiedPlayers} entrants copied; {copySummary.skipped.length} could not be copied.
+          </p>
+          <ul className="list-disc space-y-1 pl-5 text-[12px] text-ink/60">
+            {copySummary.skipped.map((player) => <li key={`${player.name}-${player.reason}`}>{player.name}: {player.reason}</li>)}
+          </ul>
+          <Link className="btn-primary btn-sm inline-flex" href={`/admin/events/${copySummary.eventId}`}>Open copied event</Link>
+        </section>
+      )}
 
       {(toast || error) && (
         <div className={`rounded-xl px-4 py-2.5 text-[13px] font-medium ${error ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200" : "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"}`}>
@@ -537,6 +620,7 @@ export function EventConsole(props: Props) {
               <h2 className="text-[15px] font-bold">Import a CSV</h2>
               <p className="text-[12px] text-ink/50">Columns: name, handicap, club, golf england id, email. One row per player.</p>
               <textarea
+                aria-label="Player CSV"
                 className="input mt-2 font-mono text-[11.5px]"
                 rows={4}
                 placeholder={"name,handicap,club\nJane Smith,12.3,Harrow GC"}

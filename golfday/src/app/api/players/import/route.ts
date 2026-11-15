@@ -8,7 +8,7 @@ import { z } from "zod";
 import { validate } from "@/lib/validate";
 
 const schema = z.object({
-  csv: z.string().min(5, "Paste a CSV first"),
+  csv: z.string().min(5, "Paste a CSV first").max(2_000_000),
   eventId: z.string().optional(),
 });
 
@@ -36,6 +36,7 @@ export const POST = route(async (request: Request) => {
           handicapIndex: row.handicapIndex,
           homeClub: row.homeClub ?? existing.homeClub,
           handicapSource: "CSV",
+          handicapVerified: false,
           handicapUpdatedAt: new Date().toISOString(),
         })
         .where(eq(players.id, existing.id));

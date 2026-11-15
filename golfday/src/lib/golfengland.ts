@@ -357,19 +357,27 @@ export function parseCsv(text: string): string[][] {
 }
 
 const HEADER_ALIASES: Record<string, keyof CsvPlayerRow> = {
-  name: "name", "player name": "name", golfer: "name", "full name": "name",
-  email: "email", "e-mail": "email",
-  handicap: "handicapIndex", "handicap index": "handicapIndex", hi: "handicapIndex", hcp: "handicapIndex",
-  "golf england id": "golfEnglandId", "golfengland id": "golfEnglandId", cdh: "golfEnglandId", "cdh id": "golfEnglandId", "england golf id": "golfEnglandId",
-  club: "homeClub", "home club": "homeClub",
+  name: "name", player: "name", member: "name", "member name": "name", "player name": "name",
+  golfer: "name", "full name": "name", "golfer name": "name", competitor: "name",
+  email: "email", "e-mail": "email", "email address": "email",
+  handicap: "handicapIndex", "handicap index": "handicapIndex", "exact handicap": "handicapIndex",
+  "whs handicap index": "handicapIndex", "hcp index": "handicapIndex", hi: "handicapIndex", hcp: "handicapIndex",
+  "golf england id": "golfEnglandId", "golfengland id": "golfEnglandId",
+  cdh: "golfEnglandId", "cdh id": "golfEnglandId", "cdh number": "golfEnglandId",
+  "england golf id": "golfEnglandId", "ghin number": "golfEnglandId", "handicap id": "golfEnglandId",
+  club: "homeClub", "home club": "homeClub", "home club name": "homeClub",
   gender: "gender", sex: "gender",
 };
+
+function playerHeaderName(value: string): string {
+  return value.replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
 
 export function parsePlayerCsv(text: string): { rows: CsvPlayerRow[]; errors: string[] } {
   const table = parseCsv(text);
   const errors: string[] = [];
   if (table.length === 0) return { rows: [], errors: ["The file is empty"] };
-  const header = table[0].map((h) => HEADER_ALIASES[h.trim().toLowerCase()] ?? null);
+  const header = table[0].map((h) => HEADER_ALIASES[playerHeaderName(h)] ?? null);
   if (!header.includes("name")) {
     return { rows: [], errors: ["Could not find a 'name' column. Expected headers like: name, email, handicap, golf england id, club"] };
   }
@@ -384,8 +392,8 @@ export function parsePlayerCsv(text: string): { rows: CsvPlayerRow[]; errors: st
       if (!value) return;
       if (key === "handicapIndex") {
         const parsed = Number(value.replace(",", "."));
-        if (Number.isNaN(parsed)) {
-          errors.push(`Row ${index + 2}: handicap "${value}" is not a number - row skipped`);
+        if (!Number.isFinite(parsed) || parsed < -10 || parsed > 54) {
+          errors.push(`Row ${index + 2}: handicap "${value}" must be between -10 and 54 - row skipped`);
           invalidHandicap = true;
           return;
         }
