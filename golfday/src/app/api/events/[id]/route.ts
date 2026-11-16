@@ -6,11 +6,10 @@ import { ApiError, getEventAccess, json, parseJson, requireEventAccess, requireU
 import { bumpRevision, getCourseWithHoles, getEventBundle, recalculateHandicaps } from "@/lib/events";
 import { newId } from "@/lib/ids";
 import { updateEventSchema, validate } from "@/lib/validate";
-import { deleteEventGames } from "@/lib/games";
+import { deleteEventGames, getGameSettings, saveGameSettings } from "@/lib/games";
 import { deleteScrambleScoresForEvent } from "@/lib/scrambleScores";
 import { deleteEventPayments } from "@/lib/payments";
 import { gamesPreset, isGrossFormat, supportsRounds } from "@/lib/eventFormats";
-import { getGameSettings, saveGameSettings } from "@/lib/games";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +38,7 @@ export const GET = route(async (request: Request, ctx: Ctx) => {
     access: access ? { role: access.role, isAdmin: access.isAdmin } : null,
     isRegistered,
     revision: bundle.revision,
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 });
 
 export const PATCH = route(async (request: Request, ctx: Ctx) => {
@@ -109,7 +108,9 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
   if (Object.keys(updates).length > 0) {
     await db.update(events).set(updates).where(eq(events.id, id));
   }
-  if (body.handicapAllowance !== undefined) await recalculateHandicaps(id);
+  if (body.handicapAllowance !== undefined || body.courseId !== undefined || formatChanged) {
+    await recalculateHandicaps(id);
+  }
   if (formatChanged) {
     // The Games tab follows the format - pairs for 4BBB, the match board for a
     // Ryder Cup, the pot for skins - merged over whatever the organiser has

@@ -29,6 +29,7 @@ export default async function AdminEventPage({ params }: { params: Promise<{ id:
   return (
     <EventConsole
       isOwner={access.role === "OWNER" || access.role === "SITE_ADMIN"}
+      canEdit={access.isAdmin}
       society={
         roster
           ? {

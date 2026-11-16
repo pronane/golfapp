@@ -34,8 +34,9 @@ const headed = args.has("--headed");
 const keepDb = args.has("--keep-db");
 const port = Number(process.env.E2E_PORT ?? 3210);
 const base = `http://127.0.0.1:${port}`;
-const dbFile = path.join(root, "data", "e2e-run.db");
-const artifacts = path.join(root, "e2e", "artifacts");
+const runId = `${process.pid}-${Date.now()}`;
+const dbFile = path.join(root, "data", `e2e-run-${runId}.db`);
+const artifacts = path.join(root, "e2e", "artifacts", `run-${runId}`);
 const env = {
   ...process.env,
   DATABASE_URL: `file:${dbFile}`,
@@ -330,6 +331,19 @@ async function journey() {
     await shot(page, "field");
   });
 
+  const importedPlayerName = "E2E Imported Golfer";
+  await step("a competitor CSV imports a player with a handicap", async () => {
+    await fillStable(
+      page,
+      '[aria-label="Player CSV"]',
+      "Player,HI,Club,CDH Number,Email Address\nE2E Imported Golfer,12.4,Harrow GC,CDH-E2E-1,e2e-imported@example.com",
+    );
+    await page.getByRole("button", { name: /import and enter players/i }).click();
+    await seesText(page, importedPlayerName, "csv-player-import");
+    await seesText(page, "12.4", "csv-player-handicap");
+    await shot(page, "csv-player-import");
+  });
+
   await step("tee groups are allocated", async () => {
     await page.getByRole("button", { name: /^groups$/i }).click();
     await page.getByRole("button", { name: /auto-allocate/i }).click();
@@ -345,7 +359,240 @@ async function journey() {
     const href = await page.locator('a[href^="/live/"]').first().getAttribute("href");
     check(Boolean(href), "the console is not showing the live board link");
     liveUrl = `${base}${href}`;
+    const sourceId = new URL(eventUrl).pathname.split("/").pop();
+    const handicap = await page.evaluate(async ({ eventId, playerName }) => {
+      const eventResponse = await fetch(`/api/events/${eventId}`, { cache: "no-store" });
+      const eventData = await eventResponse.json();
+      const registration = eventData.registrations.find((row) => row.player.name === playerName);
+      if (!registration) throw new Error("the imported player is missing from the event");
+      const courseResponse = await fetch(`/api/courses/${eventData.event.courseId}`);
+      const courseData = await courseResponse.json();
+      const tees = JSON.parse(courseData.course.tees);
+      const tee = tees.find((row) => row.name === registration.registration.tee) ?? tees[0];
+      const courseHandicap = Math.round(
+        registration.player.handicapIndex * (tee.slope / 113) + (tee.rating - tee.par),
+      );
+      const playingHandicap = Math.round(courseHandicap * (eventData.event.handicapAllowance / 100));
+      const result = [];
+      for (const holeNumber of [1, 18]) {
+        const hole = eventData.holes.find((row) => row.holeNumber === holeNumber);
+        const response = await fetch("/api/scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId, playerId: registration.player.id, holeNumber, strokes: 4 }),
+        });
+        const score = await response.json();
+        if (!response.ok) throw new Error(score.error ?? "Could not score the imported player");
+        const shotsReceived = Math.floor(playingHandicap / 18) + (hole.strokeIndex <= playingHandicap % 18 ? 1 : 0);
+        const points = Math.max(0, hole.par + 2 - (4 - shotsReceived));
+        result.push({ holeNumber, shotsReceived: score.shotsReceived, points: score.points, expectedShots: shotsReceived, expectedPoints: points });
+      }
+      return {
+        index: registration.player.handicapIndex,
+        courseHandicap: registration.registration.courseHandicap,
+        calculatedCourseHandicap: courseHandicap,
+        playingHandicap: registration.registration.playingHandicap,
+        calculatedPlayingHandicap: playingHandicap,
+        scores: result,
+      };
+    }, { eventId: sourceId, playerName: importedPlayerName });
+    check(handicap.index === 12.4, `imported handicap index was not preserved (${handicap.index})`);
+    check(handicap.courseHandicap === handicap.calculatedCourseHandicap, "the event course handicap does not match the tee's WHS calculation");
+    check(handicap.playingHandicap === handicap.calculatedPlayingHandicap, "the event playing handicap does not match the allowance");
+    for (const score of handicap.scores) {
+      check(score.shotsReceived === score.expectedShots, `hole ${score.holeNumber} received the wrong number of strokes`);
+      check(score.points === score.expectedPoints, `hole ${score.holeNumber} Stableford points did not use the handicap`);
+    }
     await shot(page, "day-open");
+  });
+
+  await step("the copied event carries handicaps into net stroke play", async () => {
+    await open(page, eventUrl);
+    const sourceEventId = new URL(eventUrl).pathname.split("/").pop();
+    const sourceHandicap = await page.evaluate(async ({ eventId, playerName }) => {
+      const response = await fetch(`/api/events/${eventId}`, { cache: "no-store" });
+      const eventData = await response.json();
+      const registration = eventData.registrations.find((row) => row.player.name === playerName);
+      if (!registration) throw new Error("the source event did not include the imported player");
+      return {
+        index: registration.registration.handicapIndex,
+        course: registration.registration.courseHandicap,
+        playing: registration.registration.playingHandicap,
+      };
+    }, { eventId: sourceEventId, playerName: importedPlayerName });
+    await page.getByRole("button", { name: /^overview$/i }).click();
+    await page.getByRole("button", { name: /copy to another day/i }).click();
+    await fillStable(page, "#copy-name", `E2E Handicap Copy ${stamp}`);
+    const sourceDate = await page.locator("#ev-date").inputValue();
+    const copyDate = new Date(`${sourceDate}T00:00:00Z`);
+    copyDate.setUTCDate(copyDate.getUTCDate() + 1);
+    await fillStable(page, "#copy-date", copyDate.toISOString().slice(0, 10));
+    await page.getByRole("button", { name: /^copy event$/i }).click();
+    await page.waitForURL(
+      (url) => url.pathname.startsWith("/admin/events/") && url.pathname.split("/").pop() !== sourceEventId,
+      { timeout: 30_000 },
+    );
+    const copiedUrl = page.url();
+    await seesText(page, `E2E Handicap Copy ${stamp}`, "event-copy");
+    const copiedSnapshot = await page.evaluate(async ({ eventId, playerName }) => {
+      const response = await fetch(`/api/events/${eventId}`, { cache: "no-store" });
+      const eventData = await response.json();
+      const registration = eventData.registrations.find((row) => row.player.name === playerName);
+      if (!registration) throw new Error("the copied event did not include the imported player");
+      return {
+        index: registration.registration.handicapIndex,
+        course: registration.registration.courseHandicap,
+        playing: registration.registration.playingHandicap,
+      };
+    }, { eventId: new URL(copiedUrl).pathname.split("/").pop(), playerName: importedPlayerName });
+    check(
+      copiedSnapshot.index === sourceHandicap.index &&
+        copiedSnapshot.course === sourceHandicap.course &&
+        copiedSnapshot.playing === sourceHandicap.playing,
+      "the copied event recalculated the source event's handicap snapshot",
+    );
+
+    await selectStable(page, "#ev-format", "STROKE_PLAY");
+    await fillStable(page, "#ev-allowance", "100");
+    await page.getByRole("button", { name: /save changes/i }).click();
+    await seesText(page, "Event updated", "copied-event-edited");
+    await page.getByRole("button", { name: /^in progress$/i }).click();
+    await page.waitForTimeout(500);
+
+    const copiedId = new URL(copiedUrl).pathname.split("/").pop();
+    const copiedScore = await page.evaluate(async ({ eventId, playerName }) => {
+      const eventResponse = await fetch(`/api/events/${eventId}`, { cache: "no-store" });
+      const eventData = await eventResponse.json();
+      const registration = eventData.registrations.find((row) => row.player.name === playerName);
+      if (!registration) throw new Error("the copied event did not include the imported player");
+      for (const hole of eventData.holes) {
+        const response = await fetch("/api/scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId, playerId: registration.player.id, holeNumber: hole.holeNumber, strokes: 4 }),
+        });
+        if (!response.ok) throw new Error((await response.json()).error ?? "Could not score the copied event");
+      }
+      const boardResponse = await fetch(`/api/events/${eventId}/leaderboard`);
+      const board = await boardResponse.json();
+      const standing = board.standings.find((row) => row.playerId === registration.player.id);
+      const expectedNetToPar = eventData.holes.reduce((total, hole) => {
+        const handicap = registration.registration.playingHandicap;
+        const magnitude = Math.abs(handicap);
+        const received = handicap > 0
+          ? Math.floor(magnitude / 18) + (hole.strokeIndex <= magnitude % 18 ? 1 : 0)
+          : handicap < 0
+            ? -(Math.floor(magnitude / 18) + (hole.strokeIndex > 18 - magnitude % 18 ? 1 : 0))
+            : 0;
+        return total + 4 - hole.par - received;
+      }, 0);
+      return {
+        index: registration.registration.handicapIndex,
+        courseHandicap: registration.registration.courseHandicap,
+        playingHandicap: registration.registration.playingHandicap,
+        format: eventData.event.format,
+        allowance: eventData.event.handicapAllowance,
+        thru: standing?.thru,
+        totalNet: standing?.totalNet,
+        netToPar: standing?.netToPar,
+        expectedNetToPar,
+      };
+    }, { eventId: copiedId, playerName: importedPlayerName });
+    check(copiedScore.index === 12.4, "the copied registration lost the player's handicap index");
+    check(
+      copiedScore.playingHandicap === copiedScore.courseHandicap,
+      `stroke-play allowance was not recalculated on the copy (playing ${copiedScore.playingHandicap}, course ${copiedScore.courseHandicap}, allowance ${copiedScore.allowance})`,
+    );
+    check(copiedScore.format === "STROKE_PLAY" && copiedScore.allowance === 100, "the copied event did not retain the edited format and allowance");
+    check(copiedScore.thru === 18, "the copied player did not complete the stroke-play round");
+    check(
+      copiedScore.netToPar === copiedScore.expectedNetToPar,
+      `net stroke play did not apply the copied handicap (net to par ${copiedScore.netToPar}, expected ${copiedScore.expectedNetToPar})`,
+    );
+    await shot(page, "copied-stroke-play");
+  });
+
+  await step("course and event CSV imports are available to organisers", async () => {
+    await open(page, base + "/admin/import");
+    await selectStable(page, "#import-kind", "courses");
+    await page.getByRole("button", { name: /load example/i }).click();
+    await page.getByRole("button", { name: /^import courses$/i }).click();
+    await seesText(page, "courses created", "csv-course-import");
+    await selectStable(page, "#import-kind", "events");
+    await page.getByRole("button", { name: /load example/i }).click();
+    await page.getByRole("button", { name: /^import events$/i }).click();
+    await seesText(page, "2 events imported as drafts", "csv-event-import");
+    await seesText(page, "Monthly Medal", "csv-event-link");
+    await seesText(page, "Summer Scramble", "csv-scramble-link");
+    await shot(page, "csv-event-import");
+  });
+
+  await step("an imported Texas Scramble applies the team handicap to its card", async () => {
+    await page.getByRole("link", { name: /^Summer Scramble/i }).click();
+    await page.getByRole("heading", { name: /run the day/i }).waitFor({ state: "visible", timeout: 30_000 });
+    const scrambleUrl = page.url();
+    const scrambleId = new URL(scrambleUrl).pathname.split("/").pop();
+    await page.getByRole("button", { name: /^field$/i }).click();
+    const scrambleCsv = [
+      "Player,HI,Club,CDH Number,Email Address",
+      ...[4, 8, 12, 16].map((handicap, index) =>
+        `E2E Scramble ${stamp} Player ${index + 1},${handicap},Harrow GC,CDH-SCR-${stamp}-${index},e2e-scr-${stamp}-${index}@example.com`,
+      ),
+    ].join("\n");
+    await fillStable(page, '[aria-label="Player CSV"]', scrambleCsv);
+    await page.getByRole("button", { name: /import and enter players/i }).click();
+    await seesText(page, `E2E Scramble ${stamp} Player 1`, "scramble-field-import");
+    await page.getByRole("button", { name: /^groups$/i }).click();
+    await page.getByRole("button", { name: /auto-allocate/i }).click();
+    await seesText(page, "Open scorecard", "scramble-groups");
+    await page.getByRole("button", { name: /^overview$/i }).click();
+    await page.getByRole("button", { name: /^in progress$/i }).click();
+    await page.waitForTimeout(500);
+
+    const scrambleResult = await page.evaluate(async (eventId) => {
+      const eventResponse = await fetch(`/api/events/${eventId}`);
+      const eventData = await eventResponse.json();
+      const group = eventData.groups[0];
+      if (!group || eventData.registrations.length !== 4) throw new Error("the imported scramble field or group is incomplete");
+      const members = eventData.registrations.map((row) => row.registration);
+      const sorted = members.map((row) => row.courseHandicap).sort((a, b) => a - b);
+      const expectedTeamHandicap = Math.round(sorted.reduce(
+        (sum, handicap, index) => sum + handicap * [0.25, 0.2, 0.15, 0.1][index],
+        0,
+      ));
+      for (const hole of eventData.holes) {
+        const drive = eventData.registrations[(hole.holeNumber - 1) % eventData.registrations.length];
+        const response = await fetch("/api/scramble", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventId,
+            groupId: group.id,
+            holeNumber: hole.holeNumber,
+            strokes: hole.par,
+            drivePlayerId: drive.player.id,
+          }),
+        });
+        if (!response.ok) throw new Error((await response.json()).error ?? "Could not score the scramble team");
+      }
+      const boardResponse = await fetch(`/api/events/${eventId}/leaderboard`);
+      const board = await boardResponse.json();
+      const team = board.teams.find((row) => row.groupId === group.id);
+      return {
+        format: eventData.event.format,
+        teamHandicap: team?.teamHandicap,
+        points: team?.points,
+        thru: team?.thru,
+        expectedTeamHandicap,
+        expectedPoints: 36 + expectedTeamHandicap,
+      };
+    }, scrambleId);
+    check(scrambleResult.format === "TEXAS_SCRAMBLE", "the imported format was not retained");
+    check(scrambleResult.teamHandicap === scrambleResult.expectedTeamHandicap, "the team handicap did not use each entrant's course handicap");
+    check(scrambleResult.points === scrambleResult.expectedPoints, "scramble points did not apply the team handicap");
+    check(scrambleResult.thru === 18, "the imported scramble card did not reach 18 holes");
+    await shot(page, "csv-scramble-handicap");
+    await open(page, eventUrl);
   });
   await step("a group enters scores on its own scorecard", async () => {
     await page.getByRole("button", { name: /^groups$/i }).click();
@@ -429,9 +676,9 @@ async function main() {
   }
 
   if (failures === 0) {
-    say(colour(32, `\n✓ All ${stepNo} steps passed. Screenshots: e2e/artifacts/\n`));
+    say(colour(32, `\n✓ All ${stepNo} steps passed. Screenshots: ${path.relative(root, artifacts)}\n`));
   } else {
-    say(colour(31, "\nThe journey did not finish. See the message above and e2e/artifacts/.\n"));
+    say(colour(31, `\nThe journey did not finish. See the message above and ${path.relative(root, artifacts)}.\n`));
   }
   process.exit(failures === 0 ? 0 : 1);
 }

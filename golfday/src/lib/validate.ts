@@ -121,6 +121,11 @@ export const updateEventSchema = z.object({
   allowCourseClash: z.boolean().optional(),
 });
 
+export const copyEventSchema = z.object({
+  name: z.string().min(2, "Give the new golf day a name").max(120),
+  date: dateString,
+});
+
 export const registerPlayerSchema = z.object({
   playerId: z.string().min(1),
   groupId: z.string().min(1).nullable().optional(),

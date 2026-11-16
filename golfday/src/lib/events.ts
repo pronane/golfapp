@@ -314,6 +314,53 @@ export async function createEvent(input: CreateEventInput) {
   return { id, slug };
 }
 
+export async function copyEvent(input: { eventId: string; createdBy: string; name: string; date: string }) {
+  const source = await getEventBundle(input.eventId);
+  if (!source) throw new ApiError(404, "Event not found", "not_found");
+  const format = source.event.format;
+  if (format !== "STABLEFORD" && format !== "STROKE_PLAY" && format !== "TEXAS_SCRAMBLE") {
+    throw new ApiError(500, "This event has an unsupported format and cannot be copied", "invalid_event_format");
+  }
+
+  const created = await createEvent({
+    name: input.name,
+    description: source.event.description ?? undefined,
+    date: input.date,
+    startTime: source.event.startTime,
+    courseId: source.event.courseId,
+    format,
+    handicapAllowance: source.event.handicapAllowance,
+    maxPlayers: source.event.maxPlayers,
+    isPublic: source.event.isPublic,
+    status: "DRAFT",
+    createdBy: input.createdBy,
+    holes: source.holes.map(({ holeNumber, par, strokeIndex }) => ({ holeNumber, par, strokeIndex })),
+  });
+
+  const skipped: { playerId: string; name: string; reason: string }[] = [];
+  let copiedPlayers = 0;
+  for (const { player, registration } of source.registrations) {
+    try {
+      await registerPlayer({
+        eventId: created.id,
+        playerId: player.id,
+        tee: registration.tee,
+        status: registration.status === "WAITLIST" ? "WAITLIST" : "REGISTERED",
+        handicapSnapshot: {
+          handicapIndex: registration.handicapIndex,
+          courseHandicap: registration.courseHandicap,
+          playingHandicap: registration.playingHandicap,
+        },
+      });
+      copiedPlayers++;
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      skipped.push({ playerId: player.id, name: player.name, reason: error.message });
+    }
+  }
+  return { ...created, copiedPlayers, skipped };
+}
+
 /**
  * "Run it again": the next golf day, built from the last one.
  *
@@ -514,6 +561,11 @@ export type RegisterPlayerInput = {
   tee?: string;
   status?: "REGISTERED" | "WAITLIST";
   force?: boolean;
+  handicapSnapshot?: {
+    handicapIndex: number;
+    courseHandicap: number;
+    playingHandicap: number;
+  };
 };
 
 /** Largest tee group a player can join on their own; admins can override. */
@@ -566,8 +618,9 @@ export async function registerPlayer(input: RegisterPlayerInput) {
   const course = event.courseId ? await getCourseWithHoles(event.courseId) : null;
   const tees = parseTees(course?.course.tees);
   const tee: Tee = tees.find((t) => t.name.toLowerCase() === (input.tee ?? "White").toLowerCase()) ?? tees[0] ?? DEFAULT_TEE;
-  const ch = courseHandicap(player.handicapIndex, tee);
-  const ph = calcPlayingHandicap(ch, effectiveAllowance(event.format, event.handicapAllowance));
+  const handicapIndex = input.handicapSnapshot?.handicapIndex ?? player.handicapIndex;
+  const ch = input.handicapSnapshot?.courseHandicap ?? courseHandicap(handicapIndex, tee);
+  const ph = input.handicapSnapshot?.playingHandicap ?? calcPlayingHandicap(ch, effectiveAllowance(event.format, event.handicapAllowance));
 
   const [existing] = await db
     .select()
@@ -598,7 +651,7 @@ export async function registerPlayer(input: RegisterPlayerInput) {
         status: wantStatus,
         groupId: input.groupId ?? existing.groupId,
         tee: tee.name,
-        handicapIndex: player.handicapIndex,
+        handicapIndex,
         courseHandicap: ch,
         playingHandicap: ph,
       })
@@ -613,7 +666,7 @@ export async function registerPlayer(input: RegisterPlayerInput) {
       playerId: input.playerId,
       groupId: input.groupId ?? null,
       status: wantStatus,
-      handicapIndex: player.handicapIndex,
+      handicapIndex,
       courseHandicap: ch,
       playingHandicap: ph,
       tee: tee.name,

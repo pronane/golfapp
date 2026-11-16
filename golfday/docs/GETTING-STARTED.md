@@ -153,6 +153,11 @@ can add a season later and attach past results.
    creates the day now and you can add the card from the console.
 3. **Review** - check the date, card and format, then create it.
 
+For a recurring fixture, open a past event in the organiser console and choose
+**Copy to another day**. The new date and name are editable, and the course, event
+settings and entrants are carried over. The new draft recalculates each entrant's
+handicap for that day's tee and allowance; scores and groups start fresh.
+
 ![Reviewing the event](screenshots/journey/09-wizard-review.jpg)
 
 ![The created event](screenshots/journey/10-event-created.jpg)

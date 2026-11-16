@@ -53,9 +53,8 @@ It checks the machine for Node.js 20+ and installs a private copy if it is missi
 (no admin rights, nothing system-wide), installs the dependencies, writes `.env` with a
 generated `AUTH_SECRET`, creates the SQLite database and applies the schema from source,
 seeds the demo, writes the start launchers, builds, and then **drives a real browser
-through a complete golf day** as a final proof (15 steps: register, create a society,
-create a day in the wizard, fill the field, allocate groups, score a card, watch the live
-board). Screenshots of every step land in `e2e/artifacts/`.
+through a complete golf day**, including CSV imports, event copying and handicap scoring.
+Screenshots of every step land in a per-run folder under `e2e/artifacts/`.
 
 Then: `./start-golfday.sh` (or `start-golfday.cmd`) and open <http://localhost:3000>.
 Full details, flags and troubleshooting: [`docs/INSTALL.md`](docs/INSTALL.md).
@@ -87,7 +86,7 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # unit tests, including offline score sync and multi-round queue cases
+npm test           # unit and database integration tests, including offline score sync
 npm run e2e        # browser click-through; also run in CI (own database, own server)
 npm run e2e:friends # the friends' day: no society, hand-typed course, cash entry
 npm run e2e:formats # all 14 walks (every format + a two-day medal), 19 players, 18,103 checks, no browser

@@ -23,6 +23,7 @@ export default async function AdminHome() {
         <div className="flex gap-2">
           <Link href="/admin/seasons" className="btn-secondary btn-sm">Seasons</Link>
           <Link href="/admin/courses" className="btn-secondary btn-sm">Course library</Link>
+          <Link href="/admin/import" className="btn-secondary btn-sm">Import CSV</Link>
           <Link href="/admin/events/new" className="btn-primary btn-sm">New golf day</Link>
         </div>
       </div>
