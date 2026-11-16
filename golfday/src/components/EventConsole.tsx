@@ -6,9 +6,13 @@ import { useEffect, useState } from "react";
 import { BLANK_CARD, CourseCardEditor, type CardHole } from "./CourseCardEditor";
 import { CopyButton } from "./CopyButton";
 import { GamesConsole } from "./GamesConsole";
+import { InvitesPanel } from "./InvitesPanel";
+import { MasterScorecard } from "./MasterScorecard";
+import { ShareButton } from "./ShareButton";
 import { PaymentsPanel } from "./PaymentsPanel";
 import { STATUS_LABEL, STATUS_STYLE } from "@/lib/status";
 import { SELECTABLE_PROVENANCES, provenanceMeta } from "@/lib/handicapProvenance";
+import { isGrossFormat } from "@/lib/eventFormats";
 
 export type ConsoleEvent = {
   id: string;
@@ -77,6 +81,8 @@ const TABS = [
   { id: "groups", label: "Groups" },
   { id: "card", label: "Card" },
   { id: "games", label: "Games" },
+  { id: "scoring", label: "Scorecards" },
+  { id: "invites", label: "Invites" },
   { id: "payments", label: "Payments" },
   { id: "admins", label: "Admins" },
 ] as const;
@@ -117,6 +123,9 @@ export function EventConsole(props: Props) {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminRole, setAdminRole] = useState<"ADMIN" | "SCORER">("ADMIN");
   const [groupSize, setGroupSize] = useState(4);
+  const [pasteList, setPasteList] = useState("");
+  const [pasteResult, setPasteResult] = useState<{ entered: number; created: number; skipped: { name: string; reason: string }[] } | null>(null);
+  const [repeat, setRepeat] = useState({ open: false, date: "", copyField: true, copyGroups: false });
 
   useEffect(() => {
     fetch("/api/courses")
@@ -317,15 +326,51 @@ export function EventConsole(props: Props) {
               </div>
               <div>
                 <label className="label" htmlFor="ev-format">Format</label>
-                <select id="ev-format" className="select" value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })}>
-                  <option value="STABLEFORD">Stableford</option>
-                  <option value="STROKE_PLAY">Net stroke play</option>
-                  <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
+                <select
+                  id="ev-format"
+                  className="select"
+                  value={form.format}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    const wasGross = isGrossFormat(form.format);
+                    const willBeGross = isGrossFormat(next);
+                    const handicapAllowance = willBeGross ? 0 : wasGross && form.handicapAllowance === 0 ? 95 : form.handicapAllowance;
+                    setForm({ ...form, format: next, handicapAllowance });
+                  }}
+                >
+                  <optgroup label="Individual">
+                    <option value="STABLEFORD">Stableford</option>
+                    <option value="STROKE_PLAY">Stroke play (net)</option>
+                    <option value="GROSS_STABLEFORD">Stableford (gross)</option>
+                    <option value="GROSS_STROKE_PLAY">Stroke play (gross)</option>
+                  </optgroup>
+                  <optgroup label="Team and games">
+                    <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
+                    <option value="FOURSOMES">Foursomes (alternate shot)</option>
+                    <option value="GREENSOMES">Greensomes (best drive)</option>
+                    <option value="SHAMBLE">Shamble (best net a hole)</option>
+                    <option value="BEST_2_OF_4">Best two of four</option>
+                    <option value="FOUR_BETTER_BALL">Better-ball pairs (4BBB)</option>
+                    <option value="RYDER_CUP">Ryder Cup (team match play)</option>
+                    <option value="SKINS_NET">Skins (net)</option>
+                    <option value="SKINS_GROSS">Skins (gross)</option>
+                  </optgroup>
                 </select>
               </div>
               <div>
-                <label className="label" htmlFor="ev-allowance">Allowance %</label>
-                <input id="ev-allowance" type="number" min={0} max={100} className="input" value={form.handicapAllowance} onChange={(e) => setForm({ ...form, handicapAllowance: Number(e.target.value) })} />
+                <label className="label" htmlFor="ev-allowance">
+                  {isGrossFormat(form.format) ? "Allowance % (gross - none given)" : "Allowance %"}
+                </label>
+                <input
+                  id="ev-allowance"
+                  type="number"
+                  min={0}
+                  max={100}
+                  className="input"
+                  value={form.handicapAllowance}
+                  disabled={isGrossFormat(form.format)}
+                  onChange={(e) => setForm({ ...form, handicapAllowance: Number(e.target.value) })}
+                />
               </div>
             </div>
             <label className="flex items-center gap-2 text-[13px] font-medium">
@@ -337,6 +382,8 @@ export function EventConsole(props: Props) {
                 className="btn-primary btn-sm"
                 disabled={busy}
                 onClick={async () => {
+                  // A format change carries its Games preset with it
+                  // (server-side, in the PATCH) - pairs, match board or pot.
                   const result = await call(`/api/events/${props.event.id}`, "PATCH", {
                     ...form,
                     description: form.description || null,
@@ -369,7 +416,10 @@ export function EventConsole(props: Props) {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[11.5px] text-ink/45">Completed events lock scoring. Draft events are hidden from the public list.</p>
+              <p className="mt-2 text-[11.5px] text-ink/45">
+                Completed events lock scoring for the field - you can still correct a card in the Scorecards tab, and
+                every change is recorded. Draft events are hidden from the public list.
+              </p>
             </section>
 
             <section className="card card-pad">
@@ -389,8 +439,73 @@ export function EventConsole(props: Props) {
                   </div>
                   <CopyButton value={`/live/${props.event.slug}`} />
                 </div>
+                <ShareButton
+                  path={`/live/${props.event.slug}`}
+                  message={`Follow ${props.event.name} live`}
+                  className="btn-secondary btn-sm w-full"
+                />
+                <Link href={`/admin/events/${props.event.id}/print`} className="btn-secondary btn-sm w-full">
+                  Print cart signs &amp; QR codes
+                </Link>
                 <a href={`/api/events/${props.event.id}/export`} className="btn-secondary btn-sm w-full">Download results CSV</a>
               </div>
+            </section>
+
+            <section className="card card-pad">
+              <h2 className="text-[15px] font-bold">Run it again</h2>
+              <p className="mt-1 text-[12.5px] text-ink/55">
+                Next month&apos;s day, built from this one: same course, card, format, games and - if you want -
+                the same field and four-balls. Nothing from this day&apos;s scores or money comes with it.
+              </p>
+              {!repeat.open ? (
+                <button className="btn-primary btn-sm mt-3 w-full" disabled={busy} onClick={() => setRepeat({ ...repeat, open: true })}>
+                  Make a copy for another date
+                </button>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <label className="label" htmlFor="repeat-date">New date</label>
+                  <input
+                    id="repeat-date"
+                    type="date"
+                    className="input"
+                    value={repeat.date}
+                    onChange={(e) => setRepeat({ ...repeat, date: e.target.value })}
+                  />
+                  <label className="flex items-center gap-2 text-[13px]">
+                    <input type="checkbox" className="h-4 w-4 accent-fairway-700" checked={repeat.copyField}
+                      onChange={(e) => setRepeat({ ...repeat, copyField: e.target.checked })} />
+                    Copy the players ({props.registrations.filter((r) => r.registration.status === "REGISTERED").length})
+                  </label>
+                  <label className="flex items-center gap-2 text-[13px]">
+                    <input type="checkbox" className="h-4 w-4 accent-fairway-700" checked={repeat.copyGroups}
+                      onChange={(e) => setRepeat({ ...repeat, copyGroups: e.target.checked, copyField: e.target.checked || repeat.copyField })} />
+                    Copy the tee groups too ({props.groups.length})
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      className="btn-primary btn-sm flex-1"
+                      disabled={busy}
+                      onClick={async () => {
+                        const created = await call(`/api/events/${props.event.id}/duplicate`, "POST", {
+                          date: repeat.date || undefined,
+                          copyField: repeat.copyField,
+                          copyGroups: repeat.copyGroups,
+                        });
+                        const id = created?.event?.id;
+                        if (id) {
+                          router.push(`/admin/events/${id}`);
+                          router.refresh();
+                        }
+                      }}
+                    >
+                      Create the copy
+                    </button>
+                    <button className="btn-ghost btn-sm" disabled={busy} onClick={() => setRepeat({ ...repeat, open: false })}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             {props.isOwner && (
@@ -533,6 +648,56 @@ export function EventConsole(props: Props) {
                 )}
               </section>
             )}
+
+            <section className="card card-pad ring-2 ring-inset ring-fairway-300/70">
+              <h2 className="text-[15px] font-bold">Paste your list</h2>
+              <p className="mt-1 text-[12.5px] text-ink/55">
+                Copy the names out of a message, one per line. A handicap after the name is optional -
+                <span className="font-mono text-[11.5px]"> Dave Smith 12.4</span> or just
+                <span className="font-mono text-[11.5px]"> Dave Smith</span>. Anyone new is created as a guest;
+                anyone already known is reused.
+              </p>
+              <textarea
+                className="input mt-2 font-mono text-[12px]"
+                rows={6}
+                aria-label="Paste the field, one player per line"
+                placeholder={"Dave Smith 12.4\nPriya Raman 5\nTom Beresford\nElla Fitzpatrick 21.3, Sunningdale"}
+                value={pasteList}
+                onChange={(e) => { setPasteList(e.target.value); setPasteResult(null); }}
+              />
+              <button
+                className="btn-primary btn-sm mt-2 w-full"
+                disabled={busy || pasteList.trim().length < 2}
+                onClick={async () => {
+                  const result = await call(`/api/events/${props.event.id}/players/bulk`, "POST", { text: pasteList });
+                  if (result) {
+                    setPasteResult({ entered: result.entered ?? 0, created: result.created ?? 0, skipped: result.skipped ?? [] });
+                    setPasteList("");
+                    flash(
+                      `${result.entered ?? 0} added` +
+                        (result.created ? ` · ${result.created} new` : "") +
+                        (result.skipped?.length ? ` · ${result.skipped.length} skipped` : ""),
+                    );
+                  }
+                }}
+              >
+                Add {pasteList.trim() ? pasteList.split("\n").filter((line) => line.trim()).length : 0} players
+              </button>
+              {pasteResult && (
+                <div className="mt-2 space-y-1 text-[12px]">
+                  <p className="text-emerald-700">
+                    {pasteResult.entered} added{pasteResult.created ? `, ${pasteResult.created} created` : ""}.
+                  </p>
+                  {pasteResult.skipped.length > 0 && (
+                    <ul className="max-h-32 space-y-0.5 overflow-y-auto rounded-lg bg-amber-50 p-2 text-amber-800">
+                      {pasteResult.skipped.map((skip, index) => (
+                        <li key={`${skip.name}-${index}`}>{skip.name}: {skip.reason}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </section>
 
             <section className="card card-pad">
               <h2 className="text-[15px] font-bold">Add a player</h2>
@@ -764,6 +929,7 @@ export function EventConsole(props: Props) {
       {tab === "games" && (
         <GamesConsole
           eventId={props.event.id}
+          format={props.event.format}
           holeCount={holes.length || 18}
           players={props.registrations
             .filter((r) => r.registration.status === "REGISTERED")
@@ -774,6 +940,16 @@ export function EventConsole(props: Props) {
               groupId: r.registration.groupId,
             }))}
         />
+      )}
+
+      {tab === "scoring" && (
+        <MasterScorecard eventId={props.event.id} scramble={props.event.format === "TEXAS_SCRAMBLE"} />
+      )}
+
+      {tab === "invites" && (
+        <section className="card card-pad">
+          <InvitesPanel eventId={props.event.id} />
+        </section>
       )}
 
       {tab === "payments" && <PaymentsPanel eventId={props.event.id} />}

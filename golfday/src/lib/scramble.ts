@@ -27,6 +27,8 @@ export type ScrambleMember = {
   name: string;
   /** Course handicap (before the event's allowance) - scramble %s apply to this. */
   courseHandicap: number;
+  /** Playing handicap (allowance applied) - foursomes halves the sum of these. */
+  playingHandicap?: number;
 };
 
 export type ScrambleHoleResult = {
@@ -99,6 +101,17 @@ export function scrambleTeamHandicap(courseHandicaps: number[]): number {
   const allowances = scrambleAllowances(sorted.length);
   const total = sorted.reduce((sum, hcp, index) => sum + hcp * (allowances[index] ?? 0), 0);
   return Math.round(total);
+}
+
+/**
+ * Foursomes / greensomes team handicap: half the sum of the partners'
+ * *playing* handicaps (the event allowance has already been applied to each),
+ * rounded to the nearest stroke - the standard combined-pair allowance.
+ */
+export function pairTeamHandicap(playingHandicaps: number[]): number {
+  if (playingHandicaps.length === 0) return 0;
+  const total = playingHandicaps.reduce((sum, hcp) => sum + hcp, 0);
+  return Math.round(total / 2);
 }
 
 /** Strokes a team receives on a hole, by stroke index (supports > 18). */
@@ -193,8 +206,16 @@ type RankInput = {
   scores: ScrambleScoreRow[];
 };
 
+/**
+ * What kind of team card this board is built from: a scramble applies the
+ * England Golf percentages to course handicaps and enforces minimum drives;
+ * a foursomes/greensomes pair halves the sum of playing handicaps and has no
+ * drives to account for.
+ */
+export type TeamCardKind = "SCRAMBLE" | "PAIR";
+
 /** Countback on the last 9 / 6 / 3 / 1 holes; higher points is better. */
-function countbackKey(row: ScrambleStanding, holesInCard: number): number[] {
+export function countbackKey(row: ScrambleStanding, holesInCard: number): number[] {
   const byHole = new Map(row.holeResults.map((h) => [h.holeNumber, h]));
   const segments = holesInCard >= 18 ? [9, 6, 3, 1] : [Math.max(1, Math.ceil(holesInCard / 2)), 3, 1];
   return segments.map((n) => {
@@ -210,15 +231,22 @@ function countbackKey(row: ScrambleStanding, holesInCard: number): number[] {
  * Builds the team leaderboard: one row per tee group, ranked on Stableford
  * points (scrambles are normally played as a Stableford or against par).
  */
-export function rankScrambleTeams(input: RankInput[], holes: ScrambleHole[]): ScrambleStanding[] {
+export function rankScrambleTeams(
+  input: RankInput[],
+  holes: ScrambleHole[],
+  kind: TeamCardKind = "SCRAMBLE",
+): ScrambleStanding[] {
   const holesInCard = holes.length || 18;
   const rows: Omit<ScrambleStanding, "position" | "tied" | "drivesShort">[] = input
     .filter((team) => team.members.length > 0)
     .map((team) => {
-      const teamHandicap = scrambleTeamHandicap(team.members.map((m) => m.courseHandicap));
+      const teamHandicap =
+        kind === "PAIR"
+          ? pairTeamHandicap(team.members.map((m) => m.playingHandicap ?? m.courseHandicap))
+          : scrambleTeamHandicap(team.members.map((m) => m.courseHandicap));
       const totals = summariseScramble(holes, team.scores, teamHandicap, team.members);
       const drives = countDrives(team.scores);
-      const min = minimumDrives(team.members.length, holesInCard);
+      const min = kind === "PAIR" ? 0 : minimumDrives(team.members.length, holesInCard);
       return {
         groupId: team.groupId,
         groupName: team.groupName,

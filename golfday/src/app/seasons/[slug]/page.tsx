@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { formatEventDate, ordinal } from "@/lib/format";
+import { formatEventDate, ordinal, todayIso } from "@/lib/format";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageSeason, getSeasonPage, isOutsideSeason } from "@/lib/seasons";
 import { SeasonFixtures } from "@/components/SeasonFixtures";
@@ -55,7 +55,11 @@ export default async function SeasonPage({ params }: { params: Promise<{ slug: s
               </p>
             </div>
             <div className="rounded-xl bg-white/60 px-4 py-3 text-right ring-1 ring-inset ring-fairway-200/70">
-              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-700/60">Leader</div>
+              {/* Once the season is over the table decides the prize: the top
+                  row is the winner, not merely the leader. */}
+              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-fairway-700/60">
+                {season.endsOn < todayIso() && table.rows.length > 0 ? "Season winner" : "Leader"}
+              </div>
               <div className="text-[17px] font-extrabold">{table.rows[0]?.playerName ?? "–"}</div>
               <div className="text-[12px] hero-muted">{table.rows[0] ? `${table.rows[0].points} pts` : "No results yet"}</div>
             </div>

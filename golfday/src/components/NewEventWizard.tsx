@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BLANK_CARD, CourseCardEditor, type CardHole } from "./CourseCardEditor";
+import { formatSummary, isGrossFormat, supportsRounds, type EventFormat } from "@/lib/eventFormats";
 
 type SavedCourse = {
   id: string;
@@ -34,13 +35,29 @@ const todayPlus = (days: number) => {
 
 type SocietyOption = { id: string; name: string };
 
+/** The last golf day this person ran, offered as "same as last time". */
+export type LastEvent = {
+  name: string;
+  date: string;
+  startTime: string;
+  format: EventFormat;
+  rounds: number;
+  handicapAllowance: number;
+  maxPlayers: number;
+  courseId: string | null;
+  courseLabel: string | null;
+};
+
 export function NewEventWizard({
   societyId = null,
   societies = [],
+  last = null,
 }: {
   societyId?: string | null;
   /** Societies this person runs - offered as an optional home for the day. */
   societies?: SocietyOption[];
+  /** Their most recent golf day, if they have run one - one click to repeat it. */
+  last?: LastEvent | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -54,7 +71,8 @@ export function NewEventWizard({
     description: "",
     date: todayPlus(14),
     startTime: "08:30",
-    format: "STABLEFORD" as "STABLEFORD" | "STROKE_PLAY" | "TEXAS_SCRAMBLE",
+    format: "STABLEFORD" as EventFormat,
+    rounds: 1,
     handicapAllowance: 95,
     maxPlayers: 48,
     isPublic: true,
@@ -87,9 +105,53 @@ export function NewEventWizard({
     par: 72,
   });
   const [manualCard, setManualCard] = useState<CardHole[]>(BLANK_CARD);
+  const [reused, setReused] = useState(false);
+
+  /**
+   * "Same as last time": a society books the same course, format, allowance and
+   * tee time every month, so the fastest path through this form is to not answer
+   * it at all. Anything it fills in can still be changed.
+   */
+  async function useLastEvent(source: LastEvent) {
+    setForm((prev) => ({
+      ...prev,
+      name: source.name,
+      startTime: source.startTime,
+      format: source.format,
+      rounds: source.rounds ?? 1,
+      handicapAllowance: source.handicapAllowance,
+      maxPlayers: source.maxPlayers,
+    }));
+    setMode("search");
+    if (source.courseId) {
+      setPendingProvider(null);
+      setSelectedId(source.courseId);
+      setSelectedLabel(source.courseLabel);
+      const res = await fetch(`/api/courses/${source.courseId}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedHoles(data.holes ?? null);
+      }
+    }
+    setReused(true);
+    setStep(1);
+  }
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  /**
+   * Changing the format moves the allowance with it: a gross day plays off
+   * zero shots, and switching back to a net format restores the usual 95%
+   * rather than inheriting the gross rule.
+   */
+  const chooseFormat = (next: EventFormat) =>
+    setForm((prev) => {
+      const wasGross = isGrossFormat(prev.format);
+      const willBeGross = isGrossFormat(next);
+      const handicapAllowance = willBeGross ? 0 : wasGross && prev.handicapAllowance === 0 ? 95 : prev.handicapAllowance;
+      return { ...prev, format: next, handicapAllowance };
+    });
 
   useEffect(() => {
     if (mode !== "search") return;
@@ -174,6 +236,7 @@ export function NewEventWizard({
           startTime: form.startTime,
           ...course,
           format: form.format,
+          rounds: form.rounds,
           handicapAllowance: Number(form.handicapAllowance),
           maxPlayers: Number(form.maxPlayers),
           isPublic: form.isPublic,
@@ -214,6 +277,23 @@ export function NewEventWizard({
 
       {step === 1 && (
         <section className="card card-pad space-y-4">
+          {last && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-fairway-50 p-3 ring-1 ring-inset ring-fairway-200">
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold">
+                  {reused ? `Copied from ${last.name}` : "Same as last time?"}
+                </div>
+                <div className="text-[11.5px] text-ink/55">
+                  {reused
+                    ? "Course, format, allowance and tee time are filled in. Change anything below."
+                    : `${last.name} · ${last.courseLabel ?? "no course"} · ${last.startTime}`}
+                </div>
+              </div>
+              <button type="button" className="btn-secondary btn-sm shrink-0" disabled={busy} onClick={() => void useLastEvent(last)}>
+                {reused ? "Use again" : "Reuse that day"}
+              </button>
+            </div>
+          )}
           <div>
             <div className="label">Who is this day for?</div>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -246,11 +326,7 @@ export function NewEventWizard({
             <label className="label" htmlFor="name">Event name</label>
             <input id="name" className="input" value={form.name} placeholder="Autumn Invitational" onChange={(e) => set("name", e.target.value)} />
           </div>
-          <div>
-            <label className="label" htmlFor="desc">Description <span className="font-normal text-ink/35">(optional)</span></label>
-            <textarea id="desc" rows={2} className="input" value={form.description} placeholder="Three-ball better-ball, shotgun start, best two scores count." onChange={(e) => set("description", e.target.value)} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="label" htmlFor="date">Date</label>
               <input id="date" type="date" className="input" value={form.date} onChange={(e) => set("date", e.target.value)} />
@@ -259,35 +335,89 @@ export function NewEventWizard({
               <label className="label" htmlFor="time">First tee</label>
               <input id="time" type="time" className="input" value={form.startTime} onChange={(e) => set("startTime", e.target.value)} />
             </div>
-            <div>
-              <label className="label" htmlFor="max">Max players</label>
-              <input id="max" type="number" min={1} max={200} className="input" value={form.maxPlayers} onChange={(e) => set("maxPlayers", Number(e.target.value))} />
-            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="format">Format</label>
-              <select id="format" className="select" value={form.format} onChange={(e) => set("format", e.target.value as typeof form.format)}>
+          <div>
+            <label className="label" htmlFor="format">Format</label>
+            <select id="format" className="select" value={form.format} onChange={(e) => chooseFormat(e.target.value as EventFormat)}>
+              <optgroup label="Individual">
                 <option value="STABLEFORD">Stableford (points)</option>
                 <option value="STROKE_PLAY">Stroke play (net)</option>
+                <option value="GROSS_STABLEFORD">Stableford (gross)</option>
+                <option value="GROSS_STROKE_PLAY">Stroke play (gross)</option>
+              </optgroup>
+              <optgroup label="Team and games">
                 <option value="TEXAS_SCRAMBLE">Texas scramble (team)</option>
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="allowance">Handicap allowance ({form.handicapAllowance}%)</label>
-              <input id="allowance" type="range" min={0} max={100} step={5} value={form.handicapAllowance} onChange={(e) => set("handicapAllowance", Number(e.target.value))} className="mt-3 w-full accent-fairway-700" />
-            </div>
+                <option value="FOURSOMES">Foursomes (alternate shot)</option>
+                <option value="GREENSOMES">Greensomes (best drive)</option>
+                <option value="SHAMBLE">Shamble (best net a hole)</option>
+                <option value="BEST_2_OF_4">Best two of four</option>
+                <option value="FOUR_BETTER_BALL">Better-ball pairs (4BBB)</option>
+                <option value="RYDER_CUP">Ryder Cup (team match play)</option>
+                <option value="SKINS_NET">Skins (net)</option>
+                <option value="SKINS_GROSS">Skins (gross)</option>
+              </optgroup>
+            </select>
           </div>
-          <div className="flex flex-wrap items-center gap-4 rounded-xl bg-ink/[0.03] p-3">
-            <label className="flex items-center gap-2 text-[13px] font-medium">
-              <input type="checkbox" className="h-4 w-4 rounded accent-fairway-700" checked={form.isPublic} onChange={(e) => set("isPublic", e.target.checked)} />
-              Public event (listed and watchable)
-            </label>
-            <label className="flex items-center gap-2 text-[13px] font-medium">
-              <input type="checkbox" className="h-4 w-4 rounded accent-fairway-700" checked={form.status === "OPEN"} onChange={(e) => set("status", e.target.checked ? "OPEN" : "DRAFT")} />
-              Open for entries straight away
-            </label>
-          </div>
+          <details className="rounded-xl bg-ink/[0.03] p-3" open={reused}>
+            <summary className="cursor-pointer text-[13px] font-semibold text-ink/70">
+              More options - allowance, max players, description, visibility
+            </summary>
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="label" htmlFor="allowance">
+                  {isGrossFormat(form.format) ? "Handicap allowance" : `Handicap allowance (${form.handicapAllowance}%)`}
+                </label>
+                <input
+                  id="allowance"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={isGrossFormat(form.format) ? 0 : form.handicapAllowance}
+                  onChange={(e) => set("handicapAllowance", Number(e.target.value))}
+                  disabled={isGrossFormat(form.format)}
+                  className="mt-3 w-full accent-fairway-700 disabled:opacity-40"
+                />
+                {isGrossFormat(form.format) && (
+                  <p className="mt-1 text-[11.5px] text-ink/50">Gross - everyone plays off the card, no shots given.</p>
+                )}
+              </div>
+              {supportsRounds(form.format) && (
+                <div>
+                  <label className="label" htmlFor="rounds">
+                    Rounds (how many times the card is played)
+                  </label>
+                  <select id="rounds" className="select" value={form.rounds} onChange={(e) => set("rounds", Number(e.target.value))}>
+                    <option value={1}>1 - a normal day</option>
+                    <option value={2}>2 - a two-day event</option>
+                    <option value={3}>3</option>
+                    <option value={4}>4</option>
+                  </select>
+                  <p className="mt-1 text-[11.5px] text-ink/50">
+                    Rounds add into one leaderboard; countback runs from the end of the last round.
+                  </p>
+                </div>
+              )}
+              <div>
+                <label className="label" htmlFor="max">Max players</label>
+                <input id="max" type="number" min={1} max={200} className="input" value={form.maxPlayers} onChange={(e) => set("maxPlayers", Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="label" htmlFor="desc">Description <span className="font-normal text-ink/35">(optional)</span></label>
+                <textarea id="desc" rows={2} className="input" value={form.description} placeholder="Three-ball better-ball, shotgun start, best two scores count." onChange={(e) => set("description", e.target.value)} />
+              </div>
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="flex items-center gap-2 text-[13px] font-medium">
+                  <input type="checkbox" className="h-4 w-4 rounded accent-fairway-700" checked={form.isPublic} onChange={(e) => set("isPublic", e.target.checked)} />
+                  Public event (listed and watchable)
+                </label>
+                <label className="flex items-center gap-2 text-[13px] font-medium">
+                  <input type="checkbox" className="h-4 w-4 rounded accent-fairway-700" checked={form.status === "OPEN"} onChange={(e) => set("status", e.target.checked ? "OPEN" : "DRAFT")} />
+                  Open for entries straight away
+                </label>
+              </div>
+            </div>
+          </details>
           <div className="flex justify-end">
             <button className="btn-primary" disabled={!step1Valid} onClick={() => setStep(2)}>Next: choose the course</button>
           </div>
@@ -454,9 +584,7 @@ export function NewEventWizard({
             <Row label="Course" value={mode === "later" ? "To be confirmed" : mode === "manual" ? `${manual.name}${manual.club ? `, ${manual.club}` : ""}` : selectedLabel ?? "—"} />
             <Row
               label="Format"
-              value={`${form.format === "STABLEFORD" ? "Stableford" : form.format === "TEXAS_SCRAMBLE" ? "Texas scramble" : "Net stroke play"} · ${
-                form.format === "TEXAS_SCRAMBLE" ? "scramble team handicap" : `${form.handicapAllowance}% allowance`
-              }`}
+              value={`${formatSummary(form.format, form.handicapAllowance)}${form.rounds > 1 ? ` · ${form.rounds} rounds` : ""}`}
             />
             <Row label="Field" value={`up to ${form.maxPlayers} players`} />
             <Row label="Visibility" value={form.isPublic ? "Public" : "Private"} />

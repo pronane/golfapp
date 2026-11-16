@@ -81,4 +81,20 @@ body {
 
 @media print {
   .no-print { display: none !important; }
+
+  /* Cart signs, the clubhouse board and the master scorecard all go on paper:
+     A4 with a real margin, white paper, and no phone-width gutters. */
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  main {
+    max-width: none;
+    padding: 0 !important;
+  }
 }

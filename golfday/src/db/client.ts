@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
+import { withSelfHealing } from "./selfHeal";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 
@@ -20,8 +21,14 @@ if (url.startsWith("file:")) {
 
 const globalForDb = globalThis as unknown as { _golfdayClient?: Client };
 
+/**
+ * `withSelfHealing` is a no-op unless AUTO_PUSH_SCHEMA / DEMO_AUTOSEED is on. When
+ * it is on, a query that names a column the database has not got yet repairs the
+ * schema and retries once, instead of taking the page down - see ./selfHeal.ts.
+ */
 export const client: Client =
-  globalForDb._golfdayClient ?? createClient(authToken ? { url, authToken } : { url });
+  globalForDb._golfdayClient ??
+  withSelfHealing(createClient(authToken ? { url, authToken } : { url }));
 
 if (process.env.NODE_ENV !== "production") globalForDb._golfdayClient = client;
 

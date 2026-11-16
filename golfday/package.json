@@ -17,7 +17,12 @@
     "setup": "node install/setup.mjs all",
     "gallery": "node demo/build-gallery.mjs",
     "seed:dump": "tsx scripts/demo-sql.ts dump",
-    "seed:import": "tsx scripts/demo-sql.ts import"
+    "seed:import": "tsx scripts/demo-sql.ts import",
+    "e2e:formats": "node e2e/all-formats.mjs",
+    "e2e:seasons": "node e2e/season-journey.mjs",
+    "e2e:upgrade": "node e2e/upgrade.mjs",
+    "model:pricing": "node scripts/pricing-model.mjs",
+    "outreach": "node scripts/outreach.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
@@ -26,6 +31,7 @@
     "jose": "^5.9.6",
     "nanoid": "^5.0.9",
     "next": "15.1.6",
+    "qrcode-generator": "^1.4.4",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "zod": "^3.24.1"

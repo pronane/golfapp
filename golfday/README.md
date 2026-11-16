@@ -29,6 +29,12 @@ golfday/
 secretary, from creating the society to the live board. The rest of this README is for
 whoever deploys and maintains the app.
 
+For an evidence-based feature comparison, prioritized checklist, and switching
+playbook, see [`docs/COMPETITIVE-ROADMAP.md`](docs/COMPETITIVE-ROADMAP.md).
+
+For the email copy generator and shared Away/GolfDay outreach workflow, see
+[`docs/OUTREACH.md`](docs/OUTREACH.md).
+
 ---
 
 ## Quick start
@@ -80,9 +86,12 @@ Useful scripts:
 npm run db:push    # apply schema (idempotent) - run against Turso in CI
 npm run db:seed    # seed only if the database is empty
 npm run db:reset   # wipe and reseed demo data
-npm test           # unit and database integration tests
-npm run e2e        # the browser click-through (own database, own server)
+npm test           # unit and database integration tests, including offline score sync
+npm run e2e        # browser click-through; also run in CI (own database, own server)
 npm run e2e:friends # the friends' day: no society, hand-typed course, cash entry
+npm run e2e:formats # all 14 walks (every format + a two-day medal), 19 players, 18,103 checks, no browser
+npm run e2e:seasons # a season's running totals across formats, then the winner: 985 checks
+npm run e2e:upgrade # boot the built app against a database older than the build
 npm run setup      # env + schema + launchers + checks, no browser run
 ```
 
@@ -140,8 +149,67 @@ MP4 and the full script for all three. Static screenshots of every screen are in
 * **Join code** so players can enter themselves, and **claim codes** so a guest player added by an organiser can later take ownership of their record.
 * **Revisions + SSE** instead of websockets: every write bumps `event_state.revision`, the stream pushes the board when it changes. This keeps it serverless-friendly.
 
+### Run the day: invitations, printing and the clubhouse screen
+
+* **Invitations by email** - the Invites tab writes each player their tee group,
+  tee time and their group's scorecard link (plus the join code and the live
+  board URL) and sends the batch. With `RESEND_API_KEY` and `MAIL_FROM` set they
+  are delivered; without them every message is still composed and recorded in
+  `mail_outbox` as a dry run, and the console says so instead of pretending
+  anybody was emailed. Each message is plain text, so it lands on an old phone
+  and does not read like a blast. See [`docs/INVITATIONS.md`](docs/INVITATIONS.md).
+* **Printed cart signs with QR codes** - `/admin/events/[id]/print` gives one
+  card per tee group with a QR that opens that group's scorecard: no app, no
+  typing a sixteen-character link on a phone in the sun. The QR is generated
+  server-side as SVG (no image service, no third-party tracking) and the page is
+  styled for a clubhouse printer.
+* **Flights** - split the field into 2-6 bands by playing handicap and each band
+  gets its own table, re-ranked inside the flight, so a 24-handicapper is
+  playing for something. Off by default; scrambled formats stay as one team
+  board.
+* **Master scorecard** - every card in the field on one screen, editable cell by
+  cell, for the organiser who has to fix a number without walking the course.
+  Each edit goes through the ordinary scoring endpoint (so it is authorised,
+  re-scored and pushed to the live board) and lands in the audit trail shown
+  beside it.
+* **Hide the board until the cards are in** - an anti-cheat switch: players (and
+  spectators) see a "your card is 11 of 18 holes in" panel instead of the
+  leaderboard until their own round is complete. Organisers always see it, and
+  it opens up when the day is completed.
+* **Share to WhatsApp** - one button on the live board and in the console, with
+  the message already written, for the way a society actually passes a link
+  around. It is a plain `https://wa.me/?text=…` deep link, so it needs **no
+  WhatsApp Business account, no Meta app, no API key and no approved message
+  template**: it opens *the WhatsApp the person already uses* and they press
+  send. On a phone that is the app; on a laptop it is WhatsApp Web (or
+  WhatsApp's "get the app" page if that browser has never paired a phone), which
+  is why a **Copy link** button sits beside it - and where the browser offers a
+  share sheet (`navigator.share`), an **Other app…** button opens that instead.
+  Nothing is sent by the server and it never sees the recipient.
+
 ### Formats, societies and seasons
 
+* **Every format in one list** - the wizard and the console both offer the full
+  catalogue (`src/lib/eventFormats.ts`): Stableford and stroke play in net **and gross**,
+  Texas scramble, **foursomes** and **greensomes**, **shamble** and **best two of four**,
+  better-ball pairs (4BBB), Ryder Cup team match play, and skins (net or gross) - thirteen
+  formats, plus a **rounds** option (1-4) for multi-round days. Picking a team or skins
+  format switches the matching Games-tab board on at creation; gross formats pin the
+  handicap allowance to zero, always.
+* **Foursomes and greensomes** - one card per pair instead of per player. Pairs are drawn
+  from the tee groups (the console's *Pair from tee groups* button), the pair's card opens
+  from the four-ball's normal scoring link, and the team handicap is half the sum of the
+  partners' playing handicaps taken on the stroke-index holes. Pair cards keep their own
+  audit trail, and the master scorecard amends them like any other card.
+* **Shamble and best two of four** - everybody cards their own ball through the normal
+  scorecard, and the team board is computed from those cards: best net a hole for a
+  shamble, the sum of the two best nets for a best-two. A hole only settles once every
+  member of the team has scored it, so a half-played card can never decide a team result.
+* **Two-day (and three- and four-round) events** - set *Rounds* on a format with
+  individual cards; every round is carded separately (the scorepad gets a round switcher)
+  and aggregates into one leaderboard, with countback walking back from the end of the
+  last round. A one-card-per-team format (scramble, foursomes, greensomes) is
+  single-round by construction, and the API refuses to pretend otherwise.
 * **Texas scramble** - a team card instead of four individual ones. Set the format when
   you create the day; each tee group is a team, a hole takes one gross score, and the
   team handicap is the England Golf scramble allowance (25/20/15/10 of the players'
@@ -184,7 +252,11 @@ MP4 and the full script for all three. Static screenshots of every screen are in
   the table builds itself from the live boards. Positions score 100-90-80-75… down the
   field (or sum Stableford points instead), ties share the position, and a **best-N**
   rule can count only a player's best results while still showing everything played.
-  Texas scramble fixtures count too: each team member earns the team's result.
+  Every team format counts too - scramble, foursomes, greensomes, shamble and
+  best-two - each member of a team earns the team's result. A fixture dated outside
+  the season's window is listed but cannot score, and once `endsOn` has passed the
+  noticeboard calls the top of the table the **Season winner**, not the leader.
+  `npm run e2e:seasons` proves the running totals across three formats (985 checks).
 
 ### Games, money and the clubhouse screen
 
@@ -276,6 +348,15 @@ credentials, and card payments unless you add Stripe keys).
 [`docs/HOSTING.md`](docs/HOSTING.md) has the provider-by-provider comparison; GolfCourseAPI and the
 Golf England CDH adapter are covered in [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 
+### What it costs to run, and what to charge for it
+
+[`docs/MONETISATION.md`](docs/MONETISATION.md) prices the whole thing: what one golf day costs to
+run (2p-37p of hosting, measured, not guessed), Vercel / Render / Cloudflare / Hetzner at 1,000,
+2,000, 5,000 and 10,000 active monthly users, a proposed price list (£15 a day, £79 a year per
+society, £249 a year per club, sponsor slots) against what Golf Genius, HowDidiDo and Squabbit
+charge, and how few paying organisers it takes to cover the bill. Every table in it is produced by
+`npm run model:pricing`, so the assumptions can be changed and re-run rather than argued with.
+
 ### GitHub, specifically
 
 GitHub Pages cannot host the app - it serves files, and sign-up/sign-in/score entry are writes
@@ -301,7 +382,18 @@ npm run seed:import                            # …or whatever DATABASE_URL poi
 npm run seed:dump                              # regenerate it from a seeded database
 ```
 
-Health check: `GET /api/health` reports `{ ok, db, schema, players }` - it is what the Render
-blueprint in [`render.yaml`](render.yaml) watches, and the first thing to read when a fresh deploy
-shows an empty site (`schema: "empty"` means `npm run db:push` has not been run against that
-database).
+Health check: `GET /api/health` reports `{ ok, db, schema, players, missingColumns }` - it is what
+the Render blueprint in [`render.yaml`](render.yaml) watches, and the first thing to read when a
+fresh deploy shows an empty site (`schema: "empty"` means `npm run db:push` has not been run
+against that database; `schema: "behind"` lists columns this build needs and that database has not
+got).
+
+### Upgrading a database that already has data
+
+`npm run db:push` is additive and idempotent: it creates any missing table and adds any missing
+column (`ALTER TABLE ... ADD COLUMN`), and never drops, renames or retypes anything. The same run
+happens automatically at boot when `AUTO_PUSH_SCHEMA=1`, and again at runtime if a query ever meets
+a missing column - so a deployment cannot come up "green" and then fail every page with
+`no such column`. Two tests keep it honest in CI: `tests/schema-drift.test.ts` fails if a column is
+added to `schema.ts` without a way for an existing database to get it (or if `seed/demo.sql` goes
+stale), and `tests/bootstrap.test.ts` upgrades a database that is deliberately behind.

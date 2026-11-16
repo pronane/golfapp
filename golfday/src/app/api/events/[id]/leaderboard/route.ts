@@ -1,6 +1,6 @@
 import { getEventById } from "@/lib/events";
 import { json, route } from "@/lib/http";
-import { buildLeaderboard, canViewEventBoard } from "@/lib/leaderboard";
+import { boardVisibility, buildLeaderboard, canViewEventBoard, redactBoard } from "@/lib/leaderboard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,5 +16,7 @@ export const GET = route(async (_request: Request, ctx: Ctx) => {
   }
   const board = await buildLeaderboard(id);
   if (!board) return json({ error: "Event not found" }, { status: 404 });
-  return json(board, { headers: { "Cache-Control": "no-store" } });
+  const visibility = await boardVisibility(board, id);
+  const payload = visibility.visible ? board : redactBoard(board, visibility);
+  return json(payload, { headers: { "Cache-Control": "no-store" } });
 });

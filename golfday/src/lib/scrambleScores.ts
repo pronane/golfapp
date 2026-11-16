@@ -4,10 +4,11 @@
  */
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { eventPlayers, groups, players, scrambleAudit, scrambleScores } from "@/db/schema";
+import { eventPairs, eventPlayers, groups, pairAudit, pairScores, players, scrambleAudit, scrambleScores } from "@/db/schema";
 import { newId } from "./ids";
 import {
   minimumDrives,
+  pairTeamHandicap,
   rankScrambleTeams,
   scrambleTeamHandicap,
   summariseScramble,
@@ -51,6 +52,48 @@ export async function buildScrambleTeams(
   return rankScrambleTeams(teamInput, holes);
 }
 
+/**
+ * Foursomes / greensomes: the team is a PAIR, not a tee group. Pairs carry
+ * playing handicaps (the event allowance is already in them), and the pair's
+ * card lives in pair_scores - alternate shot has no drive to record.
+ */
+export async function loadPairTeams(
+  eventId: string,
+  holes: ScrambleHole[],
+  pairRows: { id: string; name: string; playerA: string; playerB: string }[],
+  registrations: { playerId: string; name: string; courseHandicap: number; playingHandicap: number }[],
+) {
+  const scoreRows = await db.select().from(pairScores).where(eq(pairScores.eventId, eventId));
+  const byPair = new Map<string, ScrambleScoreRow[]>();
+  for (const row of scoreRows) {
+    const list = byPair.get(row.pairId) ?? [];
+    list.push({ holeNumber: row.holeNumber, strokes: row.strokes, drivePlayerId: null });
+    byPair.set(row.pairId, list);
+  }
+  const byPlayer = new Map(registrations.map((r) => [r.playerId, r]));
+  const input = pairRows
+    .map((pair) => {
+      const members = [pair.playerA, pair.playerB]
+        .map((id) => byPlayer.get(id))
+        .filter((r): r is NonNullable<typeof r> => Boolean(r))
+        .map((r) => ({
+          playerId: r.playerId,
+          name: r.name,
+          courseHandicap: r.courseHandicap,
+          playingHandicap: r.playingHandicap,
+        }));
+      return {
+        groupId: pair.id,
+        groupName: pair.name,
+        teeTime: null,
+        members,
+        scores: byPair.get(pair.id) ?? [],
+      };
+    })
+    .filter((team) => team.members.length === 2);
+  return rankScrambleTeams(input, holes, "PAIR");
+}
+
 /** Loads exactly the rows buildScrambleTeams needs for an event. */
 export async function loadScrambleTeams(
   eventId: string,
@@ -60,6 +103,83 @@ export async function loadScrambleTeams(
 ) {
   const rows = await db.select().from(scrambleScores).where(eq(scrambleScores.eventId, eventId));
   return buildScrambleTeams(holes, groupRows, registrations, rows);
+}
+
+export type PairCard = Omit<GroupScrambleCard, "minDrives" | "members"> & {
+  pairId: string;
+  pairName: string;
+  members: { id: string; name: string; courseHandicap: number; playingHandicap: number }[];
+};
+
+/** The team card for one pair (foursomes / greensomes), for the scoring screen. */
+export async function getPairCard(
+  eventId: string,
+  pairId: string,
+  holes: ScrambleHole[],
+): Promise<PairCard | null> {
+  const pair = (
+    await db.select().from(eventPairs).where(and(eq(eventPairs.eventId, eventId), eq(eventPairs.id, pairId))).limit(1)
+  )[0];
+  if (!pair) return null;
+  const memberRows = await db
+    .select({ registration: eventPlayers, player: players })
+    .from(eventPlayers)
+    .innerJoin(players, eq(players.id, eventPlayers.playerId))
+    .where(and(eq(eventPlayers.eventId, eventId)));
+  const active = memberRows.filter(
+    ({ registration }) =>
+      registration.status !== "WITHDRAWN" && (registration.playerId === pair.playerA || registration.playerId === pair.playerB),
+  );
+  const members = active.map(({ registration, player }) => ({
+    playerId: player.id,
+    name: player.name,
+    courseHandicap: registration.courseHandicap,
+    playingHandicap: registration.playingHandicap,
+  }));
+  const scoreRows = await db
+    .select()
+    .from(pairScores)
+    .where(and(eq(pairScores.eventId, eventId), eq(pairScores.pairId, pairId)));
+  const teamHandicap = pairTeamHandicap(members.map((m) => m.playingHandicap));
+  const rows: ScrambleScoreRow[] = scoreRows.map((r) => ({ holeNumber: r.holeNumber, strokes: r.strokes, drivePlayerId: null }));
+  const totals = summariseScramble(holes, rows, teamHandicap, members);
+  const byHole = new Map(totals.results.map((r) => [r.holeNumber, r]));
+  return {
+    enabled: true,
+    pairId: pair.id,
+    pairName: pair.name,
+    teamHandicap,
+    members: members.map((m) => ({
+      id: m.playerId,
+      name: m.name,
+      courseHandicap: m.courseHandicap,
+      playingHandicap: m.playingHandicap,
+    })),
+    holes: [...holes]
+      .sort((a, b) => a.holeNumber - b.holeNumber)
+      .map((hole) => {
+        const row = byHole.get(hole.holeNumber);
+        const score = rows.find((r) => r.holeNumber === hole.holeNumber);
+        return {
+          holeNumber: hole.holeNumber,
+          par: hole.par,
+          strokeIndex: hole.strokeIndex,
+          strokes: score?.strokes ?? null,
+          drivePlayerId: null,
+          shotsReceived: row?.shotsReceived ?? teamStrokesReceived(teamHandicap, hole.strokeIndex),
+          net: row?.net ?? null,
+          points: row?.points ?? null,
+        };
+      }),
+    totals: {
+      thru: totals.holesPlayed,
+      gross: totals.gross,
+      net: totals.net,
+      netToPar: totals.netToPar,
+      points: totals.points,
+      toPar: totals.toPar,
+    },
+  };
 }
 
 export type GroupScrambleCard = {
@@ -169,6 +289,65 @@ export async function getGroupScrambleCard(
  * Saves (or corrects) one hole of a team card. Corrections are audited, because
  * a scramble card is the one score four people all believe they remember.
  */
+/** Enter or amend one hole of a pair card (foursomes / greensomes). */
+export async function savePairScore(input: {
+  eventId: string;
+  pairId: string;
+  holeNumber: number;
+  strokes: number;
+  recordedBy: string;
+}) {
+  const [existing] = await db
+    .select()
+    .from(pairScores)
+    .where(
+      and(
+        eq(pairScores.eventId, input.eventId),
+        eq(pairScores.pairId, input.pairId),
+        eq(pairScores.holeNumber, input.holeNumber),
+      ),
+    )
+    .limit(1);
+
+  const now = new Date().toISOString();
+  if (existing) {
+    if (existing.strokes !== input.strokes) {
+      await db.insert(pairAudit).values({
+        id: newId(),
+        eventId: input.eventId,
+        pairId: input.pairId,
+        holeNumber: input.holeNumber,
+        oldStrokes: existing.strokes,
+        newStrokes: input.strokes,
+        changedBy: input.recordedBy,
+      });
+    }
+    await db
+      .update(pairScores)
+      .set({ strokes: input.strokes, recordedBy: input.recordedBy, updatedAt: now })
+      .where(eq(pairScores.id, existing.id));
+    return;
+  }
+  await db.insert(pairScores).values({
+    id: newId(),
+    eventId: input.eventId,
+    pairId: input.pairId,
+    holeNumber: input.holeNumber,
+    strokes: input.strokes,
+    recordedBy: input.recordedBy,
+    updatedAt: now,
+  });
+}
+
+/** The players in a pair, for authorisation. */
+export async function pairMemberIds(eventId: string, pairId: string): Promise<Set<string>> {
+  const pair = (
+    await db.select().from(eventPairs).where(and(eq(eventPairs.eventId, eventId), eq(eventPairs.id, pairId))).limit(1)
+  )[0];
+  if (!pair) return new Set();
+  return new Set([pair.playerA, pair.playerB]);
+}
+
 export async function saveScrambleScore(input: {
   eventId: string;
   groupId: string;

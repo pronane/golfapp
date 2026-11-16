@@ -161,11 +161,26 @@ Two switches, both set in the blueprint and both off by default:
 
 | Variable | What it does | Safe to leave on? |
 | --- | --- | --- |
-| `AUTO_PUSH_SCHEMA=1` | On boot, if the `users` table is missing, apply `src/db/schema.sql` (idempotent DDL) | Yes - it only ever creates |
+| `AUTO_PUSH_SCHEMA=1` | On **every** boot: create any missing table from `src/db/schema.sql` (idempotent DDL) and add any column this build expects but the database has not got (`ALTER TABLE ... ADD COLUMN`). Also repairs that at runtime once, if a query ever meets a missing column | Yes - it only ever adds; nothing is dropped, renamed or retyped |
 | `DEMO_AUTOSEED=1` | ...and if the database has **no accounts at all**, load `seed/demo.sql` | Yes for a demo - it never runs on a database that has any accounts |
 
 Nothing here deletes anything, which is why *resetting* a demo is still a deliberate act (next
-section) rather than something a restart can do by accident. For a deployment that will hold real
+section) rather than something a restart can do by accident.
+
+**The column half matters.** Creating tables is not enough on a database that already exists:
+`CREATE TABLE IF NOT EXISTS` does nothing to a table that is already there, so a build that adds a
+column (`flights`, `hide_board`) used to leave the old database without it and throw
+`no such column: "flights"` on every page that read it. The boot now reads `PRAGMA table_info` and
+adds only what is missing, and `/api/health` names anything still missing:
+
+```json
+{ "ok": false, "schema": "behind", "missingColumns": ["event_settings.flights"],
+  "reason": "schema is behind this build - missing event_settings.flights; run `npm run db:push`" }
+```
+
+If you ever see `schema: "behind"`, run `npm run db:push` against that database (or set
+`AUTO_PUSH_SCHEMA=1` and restart) - the app is up, but this build is reading columns the database
+has not got. For a deployment that will hold real
 golf days, set `DEMO_AUTOSEED=0` (and probably `AUTO_PUSH_SCHEMA=0`, running `npm run db:push`
 yourself).
 

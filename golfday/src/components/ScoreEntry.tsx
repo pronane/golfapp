@@ -11,6 +11,7 @@ import { formatDistance } from "@/lib/sidegames";
 import { LiveDot } from "./Icons";
 import { enqueue, flushQueue, readQueue } from "./offlineQueue";
 import { useLiveBoard } from "./useLiveBoard";
+import { isStablefordBoard } from "@/lib/eventFormats";
 
 type Props = {
   initial: GroupScoreboard;
@@ -21,6 +22,7 @@ const SCORE_WORDS: Record<number, string> = { 1: "Hole in one", 2: "Eagle", 3: "
 
 export function ScoreEntry({ initial, initialBoard }: Props) {
   const [card, setCard] = useState(initial);
+  const [round, setRound] = useState(initial.round ?? 1);
   const [activePlayerId, setActivePlayerId] = useState(initial.players[0]?.id ?? "");
   const [activeHole, setActiveHole] = useState(() => {
     const first = initial.players[0];
@@ -31,13 +33,14 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
+  const [queueWarning, setQueueWarning] = useState(false);
   const [sideValue, setSideValue] = useState("");
   const [sideMessage, setSideMessage] = useState<string | null>(null);
 
   const token = initial.group.token;
 
   const refreshCard = useCallback(async () => {
-    const res = await fetch(`/api/groups/${token}`, { cache: "no-store" });
+    const res = await fetch(`/api/groups/${token}?round=${round}`, { cache: "no-store" });
     if (!res.ok) return;
     const fresh = (await res.json()) as GroupScoreboard;
     // Keep any scores still waiting to sync visible on top of the server's card.
@@ -45,14 +48,14 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
     setCard({
       ...fresh,
       players: fresh.players.map((p) => {
-        const mine = queued.filter((q) => q.playerId === p.id);
+        const mine = queued.filter((q) => q.playerId === p.id && (q.round ?? 1) === round);
         if (mine.length === 0) return p;
         const scores = { ...p.scores };
         for (const q of mine) scores[q.holeNumber] = q.strokes;
         return { ...p, scores };
       }),
     });
-  }, [token]);
+  }, [token, round]);
 
   const sync = useCallback(async () => {
     if (readQueue(token).length === 0) {
@@ -61,6 +64,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
     }
     const result = await flushQueue(token);
     setPending(result.left);
+    if (result.left === 0) setQueueWarning(false);
     if (result.rejected.length) setError(`Not saved: ${result.rejected.join("; ")}`);
     if (result.sent > 0 || result.rejected.length > 0) await refreshCard();
   }, [token, refreshCard]);
@@ -88,8 +92,9 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
   const received = hole && activePlayer ? strokesReceived(activePlayer.playingHandicap, hole.strokeIndex) : 0;
   const existing = activePlayer?.scores[activeHole];
 
+  // `thru` aggregates every round, so the denominator does too.
   const scored = useMemo(() => card.players.reduce((sum, p) => sum + p.thru, 0), [card]);
-  const totalHoles = card.players.length * card.holes.length;
+  const totalHoles = card.players.length * card.holes.length * (card.event.rounds ?? 1);
 
   async function save(playerId: string, holeNumber: number, strokes: number) {
     setSaving(holeNumber);
@@ -102,7 +107,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
         p.id === playerId ? { ...p, scores: { ...p.scores, [holeNumber]: strokes } } : p,
       ),
     }));
-    const payload = { eventId: card.event.id, playerId, holeNumber, strokes, token: card.group.token };
+    const payload = { eventId: card.event.id, playerId, holeNumber, strokes, token: card.group.token, round };
     let res: Response;
     try {
       res = await fetch("/api/scores", {
@@ -112,8 +117,10 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
       });
     } catch {
       // No signal: keep the score on the phone and send it later.
-      enqueue(payload);
+      const persisted = enqueue(payload);
       setPending(readQueue(token).length);
+      setQueueWarning(!persisted);
+      if (!persisted) setError("Offline score is saved only while this page stays open. Keep it open until it syncs.");
       setSaving(null);
       const nextHole = card.holes.find(
         (h) => h.holeNumber > holeNumber && !(card.players.find((p) => p.id === playerId)?.scores[h.holeNumber]),
@@ -208,7 +215,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
               <span className="pill hero-chip">{scored}/{totalHoles} holes in</span>
               {pending > 0 && (
                 <span role="status" className="pill bg-amber-100 text-amber-800 ring-amber-300">
-                  {pending} saved on this phone · will sync
+                  {pending} {queueWarning ? "saved in this page only · keep it open" : "saved on this phone · will sync"}
                 </span>
               )}
               <Link href={`/live/${card.event.slug}`} className="btn-secondary btn-sm">
@@ -217,6 +224,26 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
             </div>
           </div>
         </div>
+
+        {/* round switcher (a two-day event plays the card twice) */}
+        {(card.event.rounds ?? 1) > 1 && (
+          <div className="flex gap-2 border-t border-ink/[0.06] px-4 py-2">
+            {Array.from({ length: card.event.rounds ?? 1 }, (_, i) => i + 1).map((r) => (
+              <button
+                key={r}
+                onClick={() => {
+                  setRound(r);
+                  const first = initial.players[0];
+                  const missing = initial.holes.find((h) => !first?.scores[h.holeNumber]);
+                  setActiveHole(missing?.holeNumber ?? 1);
+                }}
+                className={`pill ${r === round ? "bg-fairway-300 text-fairway-950 ring-fairway-400" : "bg-ink/[0.04] text-ink/65 ring-ink/10 hover:bg-ink/[0.08]"}`}
+              >
+                Round {r}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* player chips */}
         <div className="flex gap-2 overflow-x-auto px-4 py-2">
@@ -425,7 +452,7 @@ export function ScoreEntry({ initial, initialBoard }: Props) {
                     <div className="truncate text-[13px] font-semibold">{s.playerName}</div>
                     <div className="text-[11px] text-ink/45">thru {s.thru} · {formatToPar(s.toPar)}</div>
                   </div>
-                  <span className="font-mono text-[14px] font-extrabold">{card.event.format === "STABLEFORD" ? s.points : formatToPar(s.netToPar)}</span>
+                  <span className="font-mono text-[14px] font-extrabold">{isStablefordBoard(card.event.format) ? s.points : formatToPar(s.netToPar)}</span>
                 </li>
               ))}
               {topFive.length === 0 && <li className="px-4 py-6 text-center text-[12.5px] text-ink/45">The board is empty - you could be first.</li>}

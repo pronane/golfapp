@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiError } from "./http";
+import { EVENT_FORMATS, formatLabel, supportsRounds } from "@/lib/eventFormats";
 
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const timeString = z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM");
@@ -79,7 +80,9 @@ export const createEventSchema = z.object({
   date: dateString,
   startTime: timeString.default("08:00"),
   courseId: z.string().min(1).nullable().optional(),
-  format: z.enum(["STABLEFORD", "STROKE_PLAY", "TEXAS_SCRAMBLE"]).default("STABLEFORD"),
+  format: z.enum(EVENT_FORMATS).default("STABLEFORD"),
+  /** How many times the card is played (1 = a normal day; max four). */
+  rounds: z.coerce.number().int().min(1).max(4).default(1),
   handicapAllowance: z.coerce.number().int().min(0).max(100).default(95),
   maxPlayers: z.coerce.number().int().min(1).max(200).default(72),
   status: z.enum(["DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).default("DRAFT"),
@@ -91,6 +94,16 @@ export const createEventSchema = z.object({
   importExternalId: z.string().max(80).optional(),
   /** Society whose fixture list this golf day belongs to (the caller must run it). */
   societyId: z.string().min(1).nullable().optional(),
+}).superRefine((data, ctx) => {
+  // A scramble or a pair card is one card per team - there is no per-player
+  // card to play twice, so "two rounds" would be a promise we cannot keep.
+  if (data.rounds > 1 && !supportsRounds(data.format)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["rounds"],
+      message: `${formatLabel(data.format)} is a single-round format`,
+    });
+  }
 });
 
 export const updateEventSchema = z.object({
@@ -99,7 +112,8 @@ export const updateEventSchema = z.object({
   date: dateString.optional(),
   startTime: timeString.optional(),
   courseId: z.string().nullable().optional(),
-  format: z.enum(["STABLEFORD", "STROKE_PLAY", "TEXAS_SCRAMBLE"]).optional(),
+  format: z.enum(EVENT_FORMATS).optional(),
+  rounds: z.coerce.number().int().min(1).max(4).optional(),
   handicapAllowance: z.coerce.number().int().min(0).max(100).optional(),
   maxPlayers: z.coerce.number().int().min(1).max(200).optional(),
   status: z.enum(["DRAFT", "OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),
@@ -136,6 +150,8 @@ export const scoreSchema = z.object({
   playerId: z.string().min(1),
   holeNumber: z.coerce.number().int().min(1).max(36),
   strokes: z.coerce.number().int().min(1).max(20),
+  /** Which round of a multi-round event (absent = round 1). */
+  round: z.coerce.number().int().min(1).max(4).optional(),
   token: z.string().max(40).optional(),
 });
 

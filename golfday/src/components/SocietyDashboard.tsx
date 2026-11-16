@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { formatEventDate } from "@/lib/format";
 import { CopyButton } from "./CopyButton";
+import { formatLabel } from "@/lib/status";
 
 type Society = {
   id: string;
@@ -65,9 +66,6 @@ const isOverseasSource = (value: string): value is (typeof OVERSEAS_SOURCES)[num
   (OVERSEAS_SOURCES as readonly string[]).includes(value);
 
 const roleLabel = (role: string) => (role === "OWNER" ? "Owner" : role === "SECRETARY" ? "Secretary" : "Member");
-
-const formatLabel = (format: string) =>
-  format === "TEXAS_SCRAMBLE" ? "Texas scramble" : format === "STROKE_PLAY" ? "Net stroke play" : "Stableford";
 
 export function SocietyDashboard({ society, members, fixtures, seasons, role, canManage }: Props) {
   const router = useRouter();

@@ -53,5 +53,11 @@ services:
       # GHIN APIs need a federation partnership. See docs/INTEGRATIONS.md.
       - key: GOLF_ENGLAND_MODE
         value: mock
+      # Email is optional. Invitations are still written and shown in the
+      # console without it; set these (Resend) and they are actually delivered.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
       - key: NODE_VERSION
         value: 22.22.3

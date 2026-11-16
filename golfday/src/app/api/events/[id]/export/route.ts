@@ -12,6 +12,43 @@ export async function GET(_request: Request, ctx: Ctx) {
   if (!board) return new Response("Event not found", { status: 404 });
 
   const holeNumbers = board.holes.map((h) => h.holeNumber);
+
+  // A Texas scramble has team cards and no individual standings, so exporting
+  // only the player rows produced a header and nothing else. Teams get their own
+  // sheet, with the drive each hole was taken from - that is the rule the card
+  // is checking.
+  if (board.teams && board.teams.length > 0) {
+    const teamHeader = [
+      "Position", "Team", "Players", "Team handicap", "Tee time",
+      ...holeNumbers.flatMap((n): (string | number)[] => [`H${n}`, `H${n} drive`, `H${n} pts`]),
+      "Thru", "Gross", "Net", "Net to par",
+    ];
+    const teamLines = [teamHeader.join(",")];
+    for (const team of board.teams) {
+      const byHole = new Map(team.holeResults.map((r) => [r.holeNumber, r]));
+      const cells = [
+        team.position,
+        team.groupName,
+        team.members.map((m) => m.name).join(" / "),
+        team.teamHandicap,
+        team.teeTime ?? "",
+        ...holeNumbers.flatMap((n): (string | number)[] => {
+          const result = byHole.get(n);
+          return result ? [result.strokes, result.drivePlayerName ?? "", result.points] : ["", "", ""];
+        }),
+        team.thru, team.gross, team.net, team.netToPar,
+      ];
+      teamLines.push(cells.map((c) => `"${csvSafe(c).replace(/"/g, '""')}"`).join(","));
+    }
+    const teamFile = `${board.event.slug}-teams.csv`;
+    return new Response(teamLines.join("\n"), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${teamFile}"`,
+      },
+    });
+  }
+
   const header = [
     "Position", "Player", "Group", "Handicap", "Playing HCP", "Tee",
     ...holeNumbers.flatMap((n): (string | number)[] => [`H${n}`, `H${n} pts`]),
